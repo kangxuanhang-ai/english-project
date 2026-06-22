@@ -211,24 +211,50 @@ def _get_cached(user_id: str) -> dict | None:
     if not cached:
         return None
     timestamp = cached.get("timestamp", 0)
+    ttl = cached.get("ttl", CACHE_TTL)
     now = datetime.now(timezone.utc).timestamp()
-    if now - timestamp > CACHE_TTL:
+    if now - timestamp > ttl:
         del _recommend_cache[user_id]
         return None
     return cached.get("data")
 
 
-def _set_cache(user_id: str, data: dict) -> None:
-    """设置推荐结果缓存。"""
+def _set_cache(user_id: str, data: dict, ttl: int = CACHE_TTL) -> None:
+    """设置推荐结果缓存，支持自定义 TTL（秒）。"""
     _recommend_cache[user_id] = {
         "data": data,
         "timestamp": datetime.now(timezone.utc).timestamp(),
+        "ttl": ttl,
     }
 
 
 def clear_cache(user_id: str) -> None:
     """清除指定用户的推荐缓存。"""
     _recommend_cache.pop(user_id, None)
+
+
+def _validate_llm_result(result: dict) -> bool:
+    """验证 LLM 输出的基本结构。"""
+    courses = result.get("courses")
+    if not isinstance(courses, list):
+        return False
+    for course in courses:
+        if not isinstance(course, dict):
+            return False
+        if not isinstance(course.get("title"), str) or not isinstance(course.get("reason"), str):
+            return False
+    daily_plan = result.get("daily_plan")
+    if not isinstance(daily_plan, dict):
+        return False
+    summary = result.get("summary")
+    if not isinstance(summary, str):
+        return False
+    return True
+
+
+def _wrap_result(result: dict, cached: bool, generated_at: str | None = None) -> dict:
+    """为结果附加 cached 和 generated_at 字段。"""
+    return {**result, "cached": cached, "generated_at": generated_at}
 
 
 async def get_recommendation(user_id: str, force: bool = False) -> dict:
@@ -242,7 +268,7 @@ async def get_recommendation(user_id: str, force: bool = False) -> dict:
         cached = _get_cached(user_id)
         if cached is not None:
             logger.info(f"Recommendation cache hit for user {user_id}")
-            return cached
+            return _wrap_result(cached, cached=True, generated_at=cached.get("generated_at"))
 
     try:
         async with async_session() as db:
@@ -251,16 +277,14 @@ async def get_recommendation(user_id: str, force: bool = False) -> dict:
 
             if not user_data:
                 logger.info(f"User {user_id} not found, returning default recommendation")
-                return get_default_recommendation()
+                return _wrap_result(get_default_recommendation(), cached=False, generated_at=None)
 
             user = user_data["user"]
 
             # 冷启动判断：新用户没有学习记录时直接返回默认推荐
             if user.word_number == 0 and user.day_number == 0:
                 logger.info(f"Cold start for user {user_id}, returning default recommendation")
-                default = get_default_recommendation()
-                _set_cache(user_id, default)
-                return default
+                return _wrap_result(get_default_recommendation(), cached=False, generated_at=None)
 
             # 构建提示词
             prompt = _build_prompt(user_data)
@@ -273,13 +297,20 @@ async def get_recommendation(user_id: str, force: bool = False) -> dict:
             # 解析 LLM 输出
             result = _parse_llm_output(raw_output)
 
+            # 验证 LLM 输出结构，不合法则使用默认推荐
+            if not _validate_llm_result(result):
+                logger.warning(f"LLM output validation failed for user {user_id}, using default recommendation")
+                result = get_default_recommendation()
+
             # 确保基本字段存在（使用新副本，避免共享可变对象）
             defaults = get_default_recommendation()
             result.setdefault("courses", defaults["courses"])
             result.setdefault("daily_plan", defaults["daily_plan"])
             result.setdefault("summary", defaults["summary"])
 
-            # 缓存结果
+            # 附加元数据并缓存结果
+            now_iso = datetime.now(timezone.utc).isoformat()
+            result = _wrap_result(result, cached=False, generated_at=now_iso)
             _set_cache(user_id, result)
             logger.info(f"Recommendation generated and cached for user {user_id}")
 
@@ -287,4 +318,6 @@ async def get_recommendation(user_id: str, force: bool = False) -> dict:
 
     except Exception as e:
         logger.error(f"Failed to get recommendation for user {user_id}: {e}")
-        return get_default_recommendation()
+        result = _wrap_result(get_default_recommendation(), cached=False, generated_at=None)
+        _set_cache(user_id, result, ttl=300)
+        return result
