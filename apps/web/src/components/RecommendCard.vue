@@ -20,7 +20,8 @@ const fetchRecommend = async (force = false) => {
     try {
         const res = await getRecommend(force);
         data.value = res.data;
-    } catch {
+    } catch (e) {
+        console.error('获取推荐失败:', e);
         error.value = true;
     } finally {
         loading.value = false;
@@ -50,7 +51,14 @@ onMounted(() => fetchRecommend());
 
     <!-- 错误/无数据 -->
     <div v-else-if="error || !data" class="bg-white rounded-2xl p-6 border border-zinc-100 shadow-sm text-center">
-        <p class="text-zinc-400 text-sm">暂无推荐，请先开始学习</p>
+        <p class="text-zinc-400 text-sm mb-3">{{ error ? '加载失败' : '暂无推荐，请先开始学习' }}</p>
+        <button
+            v-if="error"
+            @click="fetchRecommend()"
+            class="text-xs text-indigo-500 hover:text-indigo-600 transition-colors cursor-pointer"
+        >
+            重试
+        </button>
     </div>
 
     <!-- 正常展示 -->
@@ -66,7 +74,7 @@ onMounted(() => fetchRecommend());
         </div>
 
         <!-- 推荐课程 -->
-        <div v-for="course in data.courses" :key="course.title" class="mb-4 last:mb-0">
+        <div v-for="(course, index) in data.courses" :key="course.course_id ?? index" class="mb-4 last:mb-0">
             <div class="flex items-start justify-between">
                 <div class="flex-1">
                     <p class="text-sm font-medium text-zinc-800">{{ course.title }}</p>
