@@ -19,22 +19,24 @@ _recommend_cache: dict[str, dict] = {}
 CACHE_TTL = 24 * 60 * 60
 VALID_COURSE_TYPES = {"gk", "zk", "gre", "toefl", "ielts", "cet6", "cet4", "ky"}
 
-DEFAULT_RECOMMENDATION = {
-    "courses": [
-        {
-            "course_id": None,
-            "title": "大学英语四级单词",
-            "reason": "CET4 是最基础的英语考试，适合所有学习者起步",
-            "match_score": 1.0,
-        }
-    ],
-    "daily_plan": {
-        "new_words_per_day": 20,
-        "review_frequency": "每3天复习一次",
-        "estimated_completion": "约3个月",
-    },
-    "summary": "欢迎开始英语学习之旅！建议从 CET4 基础词汇开始，循序渐进。",
-}
+def get_default_recommendation() -> dict:
+    """返回一份全新的默认推荐结果，避免共享可变对象。"""
+    return {
+        "courses": [
+            {
+                "course_id": None,
+                "title": "大学英语四级单词",
+                "reason": "CET4 是最基础的英语考试，适合所有学习者起步",
+                "match_score": 1.0,
+            }
+        ],
+        "daily_plan": {
+            "new_words_per_day": 20,
+            "review_frequency": "每3天复习一次",
+            "estimated_completion": "约3个月",
+        },
+        "summary": "欢迎开始英语学习之旅！建议从 CET4 基础词汇开始，循序渐进。",
+    }
 
 
 async def _query_user_data(db: AsyncSession, user_id: str) -> dict:
@@ -200,7 +202,7 @@ def _parse_llm_output(raw: str) -> dict:
 
     # 所有策略失败，返回默认推荐
     logger.warning(f"Failed to parse LLM output, using default recommendation. Raw: {raw[:200]}")
-    return DEFAULT_RECOMMENDATION
+    return get_default_recommendation()
 
 
 def _get_cached(user_id: str) -> dict | None:
@@ -249,14 +251,14 @@ async def get_recommendation(user_id: str, force: bool = False) -> dict:
 
             if not user_data:
                 logger.info(f"User {user_id} not found, returning default recommendation")
-                return DEFAULT_RECOMMENDATION
+                return get_default_recommendation()
 
             user = user_data["user"]
 
             # 冷启动判断：新用户没有学习记录时直接返回默认推荐
             if user.word_number == 0 and user.day_number == 0:
                 logger.info(f"Cold start for user {user_id}, returning default recommendation")
-                default = {**DEFAULT_RECOMMENDATION}
+                default = get_default_recommendation()
                 _set_cache(user_id, default)
                 return default
 
@@ -271,10 +273,11 @@ async def get_recommendation(user_id: str, force: bool = False) -> dict:
             # 解析 LLM 输出
             result = _parse_llm_output(raw_output)
 
-            # 确保基本字段存在
-            result.setdefault("courses", DEFAULT_RECOMMENDATION["courses"])
-            result.setdefault("daily_plan", DEFAULT_RECOMMENDATION["daily_plan"])
-            result.setdefault("summary", DEFAULT_RECOMMENDATION["summary"])
+            # 确保基本字段存在（使用新副本，避免共享可变对象）
+            defaults = get_default_recommendation()
+            result.setdefault("courses", defaults["courses"])
+            result.setdefault("daily_plan", defaults["daily_plan"])
+            result.setdefault("summary", defaults["summary"])
 
             # 缓存结果
             _set_cache(user_id, result)
@@ -284,4 +287,4 @@ async def get_recommendation(user_id: str, force: bool = False) -> dict:
 
     except Exception as e:
         logger.error(f"Failed to get recommendation for user {user_id}: {e}")
-        return DEFAULT_RECOMMENDATION
+        return get_default_recommendation()
