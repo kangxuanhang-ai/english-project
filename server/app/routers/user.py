@@ -3,12 +3,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import get_current_user
+from app.rate_limit import limiter
 from app.schemas.user import UserLogin, UserRegister, UserUpdate
 from app.services.user import login_user, register_user, refresh_user_token, upload_avatar, update_user, check_in as check_in_user
 
 router = APIRouter(prefix="/api/v1/user", tags=["user"])
 
 
+@limiter.limit("3/minute")
 @router.post("/register")
 async def register(data: UserRegister, db: AsyncSession = Depends(get_db)):
     """
@@ -22,6 +24,7 @@ async def register(data: UserRegister, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@limiter.limit("5/minute")
 @router.post("/login")
 async def login(data: UserLogin, db: AsyncSession = Depends(get_db)):
     """
