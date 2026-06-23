@@ -1,0 +1,43 @@
+[project]
+name = "english-server"
+version = "0.1.0"
+description = "English learning platform backend"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "sqlalchemy[asyncio]>=2.0",
+    "alembic>=1.14",
+    "asyncpg>=0.30",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "python-jose[cryptography]>=3.3",
+    "minio>=7.2",
+    "alipay-sdk-python>=3.0",
+    "python-socketio[asyncio]>=5.11",
+    "aiosmtplib>=3.0",
+    "markdown2>=2.5",
+    "langchain>=0.3",
+    "langchain-deepseek>=0.1",
+    "langgraph>=0.2",
+    "langgraph-checkpoint-postgres>=2.0",
+    "apscheduler>=3.10",
+    "clickhouse-connect>=0.8",
+    "nanoid>=2.0",
+    "httpx>=0.28",
+    "python-multipart>=0.0.32",
+    "psycopg-binary>=3.3.4",
+    "slowapi>=0.1.9",
+    "bcrypt>=4.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["app", "ai", "shared"]
+
+[[tool.uv.index]]
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
