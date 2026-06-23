@@ -1,3 +1,4 @@
+import re
 import time
 from datetime import UTC, date, datetime
 from io import BytesIO
@@ -11,6 +12,8 @@ from app.config import settings
 from app.models.user import User
 from app.services.auth import generate_tokens, verify_token
 from shared.minio_client import minio_client
+
+ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 
 def user_to_response(user: User, token: dict) -> dict:
@@ -138,6 +141,10 @@ async def upload_avatar(file) -> dict:
     if not file:
         raise ValueError("文件不存在")
 
+    # Content-type 校验
+    if file.content_type not in ALLOWED_TYPES:
+        raise ValueError("仅支持 JPG/PNG/WebP 格式")
+
     content = await file.read()
     if len(content) > 1024 * 1024 * 5:
         raise ValueError("文件大小不能超过5MB")
@@ -145,8 +152,9 @@ async def upload_avatar(file) -> dict:
     client = minio_client.get_client()
     bucket = minio_client.get_bucket()
 
-    # 生成文件名
-    file_name = f"{int(time.time() * 1000)}-{file.filename}"
+    # 文件名校验（去掉路径分隔符）
+    safe_name = re.sub(r'[^\w.\-]', '_', file.filename or "avatar.png")
+    file_name = f"{int(time.time() * 1000)}-{safe_name}"
 
     # 上传到 MinIO
     client.put_object(
