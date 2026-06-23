@@ -74,7 +74,7 @@ const getList = async () => {
         isLoading.value = true;
         if (currentTab.value === 'list') {
             const res = await getCourseList();
-            list.value = res.data;
+            list.value = res.data.list ?? res.data;
         } else {
             const res = await getMyCourse();
             list.value = res.data;
