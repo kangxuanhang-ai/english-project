@@ -88,7 +88,7 @@ const openPay = async (course: Course) => {
 
 }
 const imageSrc = (url: string) => {
-    return uploadUrl + url;
+    return url;
 }
 onMounted(() => {
     getList();
