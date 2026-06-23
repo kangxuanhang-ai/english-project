@@ -111,8 +111,6 @@
 <script setup lang="ts">
 import Hologram from './components/Hologram.vue'
 import RecommendCard from '@/components/RecommendCard.vue'
-import { gsap } from 'gsap'
-import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useLogin } from '@/hooks/useLogin'
 import { checkIn } from '@/apis/user'
@@ -148,7 +146,6 @@ const handleCheckIn = async () => {
     }
 }
 
-gsap.registerPlugin(ScrollTrigger)
 const stats = reactive([
     { value: 0, suffix: '+', label: '累计学员', target: 1000000 },
     { value: 0, suffix: '+', label: '精品课程', target: 500 },
@@ -173,7 +170,10 @@ const abouts = [
     },
 ]
 
-const initProject = () => {
+let gsapInstance: any = null
+let ScrollTriggerInstance: any = null
+
+const initProject = (gsap: any, ScrollTrigger: any) => {
     //数字滚动动画
     stats.forEach((item) => {
         gsap.to(item, {
@@ -261,12 +261,22 @@ const showLogin = () => {
      })
 }
 
-onMounted(() => {
-    initProject()
+onMounted(async () => {
+    const gsapModule = await import('gsap')
+    const gsap = gsapModule.default || gsapModule.gsap || gsapModule
+    const { ScrollTrigger } = await import('gsap/ScrollTrigger')
+    gsap.registerPlugin(ScrollTrigger)
+
+    gsapInstance = gsap
+    ScrollTriggerInstance = ScrollTrigger
+
+    initProject(gsap, ScrollTrigger)
 })
 
 onUnmounted(() => {
-    ScrollTrigger.getAll().forEach(t => t.kill())
+    if (ScrollTriggerInstance) {
+        ScrollTriggerInstance.getAll().forEach((t: any) => t.kill())
+    }
 })
 
 </script>
