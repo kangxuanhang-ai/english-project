@@ -31,11 +31,7 @@ const fetchRecommend = async (force = false) => {
 const handleRefresh = () => fetchRecommend(true);
 
 const handleStartLearn = (courseId: string | null) => {
-    if (courseId) {
-        router.push({ path: '/course', query: { id: courseId } });
-    } else {
-        router.push('/course');
-    }
+    router.push('/courses/index');
 };
 
 onMounted(() => fetchRecommend());
