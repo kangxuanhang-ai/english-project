@@ -114,20 +114,25 @@ const close = () => {
 
 //点击确认支付
 const onConfirm = async () => {
-    const body: CreatePayDto = {
-        subject: props.course?.name || '',
-        body: props.course?.description || '',
-        total_amount: props.course?.price || '',
-        courseId: props.course?.id || '',
-    }
-    const res = await createPay(body);
-    if (res.code === 200) {
-        isPay.value = true; //设置支付中
-        window.open(res.data.payUrl, '_blank'); //打开支付页面
-        timeExpire.value = res.data.timeExpire; //设置倒计时
-    } else {
-        ElMessage.error(res.message); //提示错误
-        isPay.value = false; //重置支付状态
+    try {
+        isPay.value = true;
+        const body: CreatePayDto = {
+            subject: props.course?.name || '',
+            body: props.course?.description || '',
+            total_amount: props.course?.price || '',
+            courseId: props.course?.id || '',
+        }
+        const res = await createPay(body);
+        if (res.code === 200) {
+            window.open(res.data.payUrl, '_blank'); //打开支付页面
+            timeExpire.value = res.data.timeExpire; //设置倒计时
+        } else {
+            ElMessage.error(res.message); //提示错误
+        }
+    } catch (error) {
+        ElMessage.error('创建支付订单失败');
+    } finally {
+        isPay.value = false;
     }
 }
 </script>

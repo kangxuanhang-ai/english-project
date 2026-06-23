@@ -60,20 +60,29 @@ import { useLogin } from '@/hooks/useLogin';
 import { useUserStore } from '@/stores/user';
 import { useRouter } from 'vue-router';
 import RecommendCard from '@/components/RecommendCard.vue';
+import { ElMessage } from 'element-plus';
 const router = useRouter();
 const userStore = useUserStore();
 const currentTab = ref('list');
 const { login } = useLogin();
 const list = ref<CourseList>([]);
+const isLoading = ref(false);
 const payVisible = ref(false); //控制弹框的显示
 const selectedCourse = ref<Course | null>(null); //选中的课程
 const getList = async () => {
-    if (currentTab.value === 'list') {
-        const res = await getCourseList();
-        list.value = res.data;
-    } else {
-        const res = await getMyCourse();
-        list.value = res.data;
+    try {
+        isLoading.value = true;
+        if (currentTab.value === 'list') {
+            const res = await getCourseList();
+            list.value = res.data;
+        } else {
+            const res = await getMyCourse();
+            list.value = res.data;
+        }
+    } catch (error) {
+        ElMessage.error('加载课程列表失败');
+    } finally {
+        isLoading.value = false;
     }
 }
 //打开支付弹框

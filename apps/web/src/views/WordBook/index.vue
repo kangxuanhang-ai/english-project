@@ -57,12 +57,14 @@ import { getWordBookList } from '@/apis/word-book'
 import type { WordQuery, WordList } from '@en/common/word'
 import { Reading, VideoPlay } from '@element-plus/icons-vue'
 import { useAudio } from '@/hooks/useAudio'
+import { ElMessage } from 'element-plus'
 import DOMPurify from 'dompurify'
 
 function sanitize(html: string): string {
     return DOMPurify.sanitize(html)
 }
 const { playAudio } = useAudio({})
+const isLoading = ref(false)
 const total = ref<WordList['total']>(0)
 const list = ref<WordList['list']>([])
 const query = ref<WordQuery>({
@@ -84,10 +86,17 @@ const searchWord = () => {
 }
 
 const getList = async () => {
-    const res = await getWordBookList(query.value)
-    if (res.success) {
-        total.value = res.data.total
-        list.value = res.data.list
+    try {
+        isLoading.value = true;
+        const res = await getWordBookList(query.value)
+        if (res.success) {
+            total.value = res.data.total
+            list.value = res.data.list
+        }
+    } catch (error) {
+        ElMessage.error('加载词库列表失败');
+    } finally {
+        isLoading.value = false;
     }
 }
 

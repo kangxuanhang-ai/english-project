@@ -205,13 +205,18 @@ const onKeyDown = (index: number, event: KeyboardEvent) => {
 }
 
 const getWordListData = async () => {
-    isLoading.value = true;
-    const res = await getWordList(route.params.courseId as string);
-    isLoading.value = false;
-    if (res.success) {
-        list.value = res.data;
-    } else {
-        ElMessage.error(res.message);
+    try {
+        isLoading.value = true;
+        const res = await getWordList(route.params.courseId as string);
+        if (res.success) {
+            list.value = res.data;
+        } else {
+            ElMessage.error(res.message);
+        }
+    } catch (error) {
+        ElMessage.error('加载单词列表失败');
+    } finally {
+        isLoading.value = false;
     }
 }
 
