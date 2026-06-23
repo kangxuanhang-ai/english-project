@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.rate_limit import limiter
-from app.schemas.user import UserLogin, UserRegister, UserUpdate
+from app.schemas.user import UserLogin, UserRegister, UserUpdate, RefreshTokenRequest
 from app.services.user import login_user, register_user, refresh_user_token, upload_avatar, update_user, check_in as check_in_user
 
 router = APIRouter(prefix="/api/v1/user", tags=["user"])
@@ -39,10 +39,10 @@ async def login(data: UserLogin, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/refresh-token")
-async def refresh(data: dict, db: AsyncSession = Depends(get_db)):
+async def refresh(data: RefreshTokenRequest, db: AsyncSession = Depends(get_db)):
     """刷新 token。对应 NestJS POST /api/v1/user/refresh-token"""
     try:
-        result = await refresh_user_token(db, data.get("refreshToken", ""))
+        result = await refresh_user_token(db, data.refreshToken)
         return {"data": result, "code": 200, "message": "刷新成功"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
