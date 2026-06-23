@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 # Windows 上 psycopg 需要 SelectorEventLoop
@@ -15,6 +16,7 @@ if sys.platform == "win32":
 
 from ai.routers import prompt, chat, conversation, recommend
 from ai.services.digest import start_scheduler
+from app.config import settings
 from app.middleware import response_envelope_middleware, exception_handler
 
 
@@ -35,6 +37,14 @@ async def lifespan(app: FastAPI):
 
 
 ai_app = FastAPI(title="English AI Server", version="0.1.0", lifespan=lifespan)
+
+ai_app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # 注册中间件（跳过 SSE 和 Socket.IO 路径）
 ai_app.middleware("http")(response_envelope_middleware)
