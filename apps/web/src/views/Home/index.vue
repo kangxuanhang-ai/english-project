@@ -113,7 +113,7 @@ import Hologram from './components/Hologram.vue'
 import RecommendCard from '@/components/RecommendCard.vue'
 import { gsap } from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useLogin } from '@/hooks/useLogin'
 import { checkIn } from '@/apis/user'
 import { useUserStore } from '@/stores/user'
@@ -263,6 +263,10 @@ const showLogin = () => {
 
 onMounted(() => {
     initProject()
+})
+
+onUnmounted(() => {
+    ScrollTrigger.getAll().forEach(t => t.kill())
 })
 
 </script>
