@@ -19,7 +19,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref,customRef } from 'vue'
+import { ref,customRef, onMounted, onUnmounted } from 'vue'
 import { Search } from '@element-plus/icons-vue'
 import type { Word } from '@en/common/word'
 import {getWordBookList} from '@/apis/word-book'
@@ -65,7 +65,7 @@ const copyWord = (word: string) => {
         ElMessage.error('复制失败')
     }
 }
-window.addEventListener('keydown',(e: KeyboardEvent)=>{
+function onKeydown(e: KeyboardEvent) {
     if(e.key === 'f' && e.ctrlKey) {
         e.preventDefault()
         isShow.value = true
@@ -76,7 +76,10 @@ window.addEventListener('keydown',(e: KeyboardEvent)=>{
         search.value = ''
         document.body.style.overflow = 'auto'
     }
-})
+}
+
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <style scoped>
