@@ -5,7 +5,7 @@ from io import BytesIO
 
 import bcrypt
 from nanoid import generate
-from sqlalchemy import select
+from sqlalchemy import update, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -210,25 +210,27 @@ async def update_user(db: AsyncSession, user_id: str, data: dict) -> dict:
 
 async def check_in(db: AsyncSession, user_id: str) -> dict:
     """
-    用户每日打卡。
-    如果今天已打卡，返回当前 day_number。
-    如果今天未打卡，day_number += 1。
+    用户每日打卡（原子操作，防止并发竞态）。
+    使用单条 UPDATE + WHERE 条件保证原子性。
     """
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if not user:
-        raise ValueError("用户不存在")
-
-    now_utc = datetime.now(UTC)
-    today = now_utc.date()
-    # last_check_in_at 记录最后打卡时间（UTC）
-    already_checked = user.last_check_in_at and user.last_check_in_at.date() == today
-
-    if already_checked:
-        return {"dayNumber": user.day_number, "checkedIn": False}
-
-    user.day_number = (user.day_number or 0) + 1
-    user.last_check_in_at = now_utc.replace(tzinfo=None)
+    stmt = (
+        update(User)
+        .where(User.id == user_id)
+        .where(
+            or_(
+                User.last_check_in_at.is_(None),
+                func.date(User.last_check_in_at) != func.current_date(),
+            )
+        )
+        .values(
+            last_check_in_at=func.now(),
+            day_number=User.day_number + 1,
+        )
+        .returning(User.day_number)
+    )
+    result = await db.execute(stmt)
+    day_number = result.scalar_one_or_none()
+    if day_number is None:
+        raise ValueError("今日已打卡")
     await db.commit()
-    await db.refresh(user)
-    return {"dayNumber": user.day_number, "checkedIn": True}
+    return {"dayNumber": day_number, "checkedIn": True}
