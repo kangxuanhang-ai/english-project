@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -12,7 +12,7 @@ router = APIRouter(prefix="/api/v1/user", tags=["user"])
 
 @limiter.limit("3/minute")
 @router.post("/register")
-async def register(data: UserRegister, db: AsyncSession = Depends(get_db)):
+async def register(request: Request, data: UserRegister, db: AsyncSession = Depends(get_db)):
     """
     用户注册。
     对应 NestJS POST /api/v1/user/register。
@@ -26,7 +26,7 @@ async def register(data: UserRegister, db: AsyncSession = Depends(get_db)):
 
 @limiter.limit("5/minute")
 @router.post("/login")
-async def login(data: UserLogin, db: AsyncSession = Depends(get_db)):
+async def login(request: Request, data: UserLogin, db: AsyncSession = Depends(get_db)):
     """
     用户登录。
     对应 NestJS POST /api/v1/user/login。
