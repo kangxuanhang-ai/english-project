@@ -1,3 +1,4 @@
+import logging
 import socketio
 
 from app.config import settings
@@ -15,7 +16,7 @@ async def connect(sid, environ):
     user_id = query.get("userId", [None])[0]
     if user_id:
         await sio.enter_room(sid, f"user_{user_id}")
-        print(f"Socket.IO: user_{user_id} connected")
+        logging.info(f"Socket.IO: user_{user_id} connected")
 
 
 @sio.event

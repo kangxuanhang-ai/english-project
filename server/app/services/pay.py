@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
@@ -114,7 +115,7 @@ def _verify_alipay_sign(data: dict, sign: str) -> bool:
         )
         return True
     except Exception as e:
-        print(f"Signature verification failed: {e}")
+        logging.warning(f"Signature verification failed: {e}")
         return False
 
 
@@ -126,7 +127,7 @@ async def handle_payment_notify(db: AsyncSession, form_data: dict) -> bool:
     # 验证支付宝签名（防止伪造回调）
     sign = form_data.get("sign", "")
     if not _verify_alipay_sign(form_data, sign):
-        print("Alipay signature verification failed")
+        logging.warning("Alipay signature verification failed")
         return False
 
     out_trade_no = form_data.get("out_trade_no")
@@ -150,7 +151,7 @@ async def handle_payment_notify(db: AsyncSession, form_data: dict) -> bool:
     try:
         body = json.loads(body_str)
     except (json.JSONDecodeError, TypeError) as e:
-        print(f"Failed to parse payment body: {e}")
+        logging.warning(f"Failed to parse payment body: {e}")
         await db.rollback()  # 回滚，避免支付成功但无课程记录的不一致状态
         return False
 

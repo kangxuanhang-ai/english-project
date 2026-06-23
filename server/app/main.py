@@ -1,4 +1,6 @@
+import logging
 import socketio
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,7 +14,17 @@ from app.rate_limit import limiter
 from app.routers import user, word_book, course, pay, learn, tracker
 from app.services.socket import sio
 
-app = FastAPI(title="English Server", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app):
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
+    yield
+
+
+app = FastAPI(title="English Server", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
