@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
 
-FROM node:20-alpine AS web-builder
+FROM node:22-alpine AS web-builder
 WORKDIR /repo
-RUN corepack enable pnpm
+RUN corepack enable && corepack prepare pnpm@10.26.1 --activate
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages ./packages
@@ -18,9 +18,9 @@ RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @en/tracker build
 RUN pnpm --filter @en/web build-only
 
-FROM node:20-alpine AS admin-builder
+FROM node:22-alpine AS admin-builder
 WORKDIR /repo
-RUN corepack enable pnpm
+RUN corepack enable && corepack prepare pnpm@10.26.1 --activate
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages ./packages
