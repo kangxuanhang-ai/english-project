@@ -3,7 +3,7 @@ import { useUserStore } from '@/stores/user'
 import { createAuthInterceptor } from './auth'
 
 export const uploadUrl = import.meta.env.VITE_MINIO_ENDPOINT
-export const socketUrl = import.meta.env.VITE_SOCKET_URL
+export const socketUrl = import.meta.env.VITE_SOCKET_URL || ''
 export const timeout = 50000
 
 // server 服务器接口

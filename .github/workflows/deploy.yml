@@ -1,0 +1,88 @@
+name: Deploy to ECS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_OWNER: kangxuanhang-ai
+  PUBLIC_HOST: http://101.37.235.230
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push server image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/server/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/english-project/server:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/english-project/server:${{ github.sha }}
+
+      - name: Build and push nginx image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/nginx/Dockerfile
+          push: true
+          build-args: |
+            VITE_MINIO_ENDPOINT=${{ env.PUBLIC_HOST }}/minio
+            VITE_SOCKET_URL=
+            VITE_BASE=/admin/
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/english-project/nginx:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/english-project/nginx:${{ github.sha }}
+
+      - name: Copy compose file to ECS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.ECS_HOST }}
+          username: ${{ secrets.ECS_USER }}
+          key: ${{ secrets.ECS_SSH_KEY }}
+          source: deploy/docker-compose.yml
+          target: /opt/english-project
+          strip_components: 1
+
+      - name: Deploy on ECS
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          SERVER_ENV: ${{ secrets.SERVER_ENV }}
+          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+          IMAGE_TAG: ${{ github.sha }}
+        with:
+          host: ${{ secrets.ECS_HOST }}
+          username: ${{ secrets.ECS_USER }}
+          key: ${{ secrets.ECS_SSH_KEY }}
+          envs: SERVER_ENV,GHCR_PULL_TOKEN,IMAGE_TAG
+          script: |
+            set -e
+            mkdir -p /opt/english-project
+            cd /opt/english-project
+            printf '%s\n' "$SERVER_ENV" > .env
+            grep -v '^IMAGE_TAG=' .env > .env.tmp || true
+            mv .env.tmp .env
+            echo "IMAGE_TAG=${IMAGE_TAG}" >> .env
+            echo "$GHCR_PULL_TOKEN" | docker login ghcr.io -u ${{ env.IMAGE_OWNER }} --password-stdin
+            docker compose -f docker-compose.yml pull
+            docker compose -f docker-compose.yml up -d --remove-orphans
+            docker image prune -f
+            echo "Deploy finished. Health: curl -s ${{ env.PUBLIC_HOST }}/health"

@@ -20,7 +20,7 @@ export const useSocket = () => {
             }
         }
 
-        socket = io(socketUrl, {
+        socket = io(socketUrl || undefined, {
             transports: ['websocket'],
             autoConnect: true,
             reconnection: true,

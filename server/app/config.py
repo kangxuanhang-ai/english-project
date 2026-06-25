@@ -26,6 +26,8 @@ class AppSettings(BaseSettings):
     minio_access_key: str = Field(alias="MINIO_ACCESS_KEY")
     minio_secret_key: str = Field(alias="MINIO_SECRET_KEY")
     minio_bucket: str = Field(default="avatar", alias="MINIO_BUCKET")
+    # 浏览器访问 MinIO 的基址；Docker 内网用 minio 主机名时必填（如 http://公网IP/minio）
+    minio_public_base: str = Field(default="", alias="MINIO_PUBLIC_BASE")
 
     cors_origins: list[str] = Field(default=["http://localhost:8080"], alias="CORS_ORIGINS")
 

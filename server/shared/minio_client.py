@@ -59,3 +59,11 @@ class MinioClient:
 
 
 minio_client = MinioClient()
+
+
+def minio_object_public_url(object_path: str) -> str:
+    """生成对象对外 URL（object_path 形如 /avatar/xxx.png）。"""
+    if settings.minio_public_base:
+        return f"{settings.minio_public_base.rstrip('/')}{object_path}"
+    protocol = "https" if settings.minio_use_ssl else "http"
+    return f"{protocol}://{settings.minio_endpoint}:{settings.minio_port}{object_path}"

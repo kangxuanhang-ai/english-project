@@ -8,9 +8,8 @@ from nanoid import generate
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
 from app.models.course import Course
-from shared.minio_client import minio_client
+from shared.minio_client import minio_client, minio_object_public_url
 
 VALID_VALUES = {"gk", "zk", "gre", "toefl", "ielts", "cet6", "cet4", "ky"}
 ALLOWED_COVER_TYPES = {"image/jpeg", "image/png", "image/webp"}
@@ -72,9 +71,8 @@ async def upload_course_cover(file) -> dict:
         content_type=file.content_type,
     )
 
-    protocol = "https" if settings.minio_use_ssl else "http"
     object_path = f"/{bucket}/{file_name}"
-    preview_url = f"{protocol}://{settings.minio_endpoint}:{settings.minio_port}{object_path}"
+    preview_url = minio_object_public_url(object_path)
     return {"url": preview_url, "path": object_path}
 
 

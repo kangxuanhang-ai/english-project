@@ -25,6 +25,7 @@ htmlcov/
 !.env.example
 server/.env
 apps/web/.env.development
+deploy/.env
 apps/web/.env.production
 *.pem
 *.key

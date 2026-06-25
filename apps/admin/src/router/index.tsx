@@ -34,7 +34,8 @@ function GuestOnly({ children }: { children: ReactNode }) {
   return <>{children}</>
 }
 
-export const router = createBrowserRouter([
+export const router = createBrowserRouter(
+  [
   {
     path: '/login',
     element: (
@@ -65,4 +66,6 @@ export const router = createBrowserRouter([
       { path: 'analytics', element: <AnalyticsOverviewPage /> },
     ],
   },
-])
+  ],
+  { basename: import.meta.env.BASE_URL.replace(/\/$/, '') || undefined },
+)

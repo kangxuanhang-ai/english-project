@@ -9,9 +9,6 @@
     "ai": "cd server && uv run python -m uvicorn ai.main:ai_app --host 0.0.0.0 --port 3001 --reload",
     "all": "concurrently \"pnpm run web\" \"pnpm run admin\" \"pnpm run server\" \"pnpm run ai\""
   },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
-  },
   "dependencies": {
     "@types/md5": "^2.3.6",
     "concurrently": "^9.2.1",

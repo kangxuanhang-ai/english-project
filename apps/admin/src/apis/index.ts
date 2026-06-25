@@ -25,7 +25,7 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       useUserStore.getState().logout()
-      window.location.href = '/login'
+      window.location.href = `${import.meta.env.BASE_URL}login`.replace(/\/{2,}/g, '/')
     }
     return Promise.reject(error)
   },

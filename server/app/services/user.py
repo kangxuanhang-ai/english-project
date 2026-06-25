@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.models.user import User
 from app.services.auth import generate_tokens, verify_token
-from shared.minio_client import minio_client
+from shared.minio_client import minio_client, minio_object_public_url
 
 ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
@@ -184,10 +184,8 @@ async def upload_avatar(file) -> dict:
         content_type=file.content_type,
     )
 
-    # 生成 URL
-    protocol = "https" if settings.minio_use_ssl else "http"
     object_path = f"/{bucket}/{file_name}"
-    preview_url = f"{protocol}://{settings.minio_endpoint}:{settings.minio_port}{object_path}"
+    preview_url = minio_object_public_url(object_path)
 
     return {"previewUrl": preview_url, "databaseUrl": object_path}
 
