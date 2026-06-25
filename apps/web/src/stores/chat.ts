@@ -82,6 +82,13 @@ export const useChatStore = defineStore('chat', () => {
         }
     }
 
+    /** 登出时清空会话状态（setup store 无 $reset） */
+    function reset() {
+        activeRole.value = 'normal'
+        activeConversationId.value = null
+        conversations.value = []
+    }
+
     return {
         activeRole,
         activeConversationId,
@@ -92,5 +99,6 @@ export const useChatStore = defineStore('chat', () => {
         createConversation,
         deleteConversation,
         updateTitle,
+        reset,
     }
 })

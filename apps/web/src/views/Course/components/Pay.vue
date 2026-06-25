@@ -1,7 +1,7 @@
 <template>
     <Teleport to="body">
         <Transition name="pay-fade">
-            <div v-if="modelValue" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div v-if="modelValue" class="fixed inset-0 z-[55] flex items-center justify-center p-4">
                 <!-- 遮罩 -->
                 <div class="absolute inset-0 bg-zinc-900/50 backdrop-blur-sm" aria-hidden="true" />
 
@@ -30,10 +30,11 @@
                             <span class="text-sm text-zinc-600">支付金额</span>
                             <span class="text-xl font-bold text-indigo-600">¥{{ course.price }}</span>
                         </div>
-                        <!-- 支付剩余时间倒计时（创建订单后显示） -->
-                        <div v-if="timeExpire > 0"
+                        <!-- 支付剩余时间倒计时（点击确认支付后显示） -->
+                        <div v-if="isPay && timeExpire > 0"
                             class="flex flex-col items-center rounded-xl border border-amber-100 bg-amber-50/50 px-4 py-3">
                             <el-countdown title="支付剩余时间" format="HH:mm:ss" :value="timeExpire" @finish="tips" />
+                            <p class="mt-2 text-xs text-amber-700/80">支付完成后将自动确认，也可切回本页等待</p>
                         </div>
                     </div>
 
@@ -63,59 +64,152 @@
 
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { onBeforeUnmount, ref, watch } from 'vue'
 import type { Course } from '@en/common/course';
 import { ElMessage } from 'element-plus';
-import { uploadUrl } from '@/apis';
-import type { CreatePayDto } from '@en/common/pay';
-import { createPay } from '@/apis/pay';
+import type { CreatePayDto, ResultPay } from '@en/common/pay';
+import { createPay, syncPay } from '@/apis/pay';
 import { useSocket } from '@/hooks/useSocket';
+import { useTracker } from '@/hooks/useTracker';
+
+const emit = defineEmits<{ success: [] }>();
 const { getSocket } = useSocket();
+const tracker = useTracker();
 const modelValue = defineModel<boolean>('modelValue', { required: true });
 const props = defineProps<{
     course: Course | null;
+    /** 聊天购课：订单已创建，本弹框仅跳转支付宝 */
+    preCreatedOrder?: ResultPay | null;
 }>();
-const isPay = ref(false); //是否支付中
-const timeExpire = ref(0); //支付剩余时间
+const isPay = ref(false);
+const timeExpire = ref(0);
+const outTradeNo = ref('');
+const paymentHandled = ref(false);
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+let syncing = false;
 
-watch(modelValue, (newVal) => {
-    const socket = getSocket();
-    if (newVal) {
-        socket?.on('paymentSuccess', () => {
-            ElMessage.success({
-                message: '支付成功',
-                duration: 10000 //10秒后自动关闭
-            });
-            close();
-        });
-    } else {
-        socket?.off('paymentSuccess');
+const stopPolling = () => {
+    if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
     }
-})
+};
 
-//图片地址
+const detachPayListeners = () => {
+    getSocket()?.off('paymentSuccess', showPaySuccess);
+    document.removeEventListener('visibilitychange', onVisibilityChange);
+};
+
+const showPaySuccess = (payload?: string | { userId?: string; courseId?: string; outTradeNo?: string }) => {
+    if (paymentHandled.value) return;
+
+    // 兼容旧版仅传 userId 字符串；新版校验订单与课程
+    if (payload && typeof payload === 'object') {
+        if (payload.outTradeNo && outTradeNo.value && payload.outTradeNo !== outTradeNo.value) {
+            return;
+        }
+        if (payload.courseId && props.course?.id && payload.courseId !== props.course.id) {
+            return;
+        }
+    }
+
+    paymentHandled.value = true;
+    stopPolling();
+    detachPayListeners();
+    isPay.value = false;
+
+    ElMessage.success({
+        message: '支付成功',
+        duration: 3000,
+    });
+    void tracker.trackEvent('pay_success', {
+        courseId: props.course?.id,
+        courseName: props.course?.name,
+    });
+    emit('success');
+    close();
+};
+
+const checkPaymentStatus = async () => {
+    if (!outTradeNo.value || paymentHandled.value || syncing) return;
+    syncing = true;
+    try {
+        const res = await syncPay({ outTradeNo: outTradeNo.value });
+        if (res.code === 200 && res.data.paid) {
+            showPaySuccess();
+        }
+    } catch {
+        // 轮询失败时静默重试
+    } finally {
+        syncing = false;
+    }
+};
+
+const startPolling = () => {
+    stopPolling();
+    if (!outTradeNo.value) return;
+    void checkPaymentStatus();
+    pollTimer = setInterval(() => {
+        void checkPaymentStatus();
+    }, 3000);
+};
+
+const onVisibilityChange = () => {
+    if (document.visibilityState === 'visible' && outTradeNo.value && timeExpire.value > Date.now()) {
+        void checkPaymentStatus();
+    }
+};
+
+watch(modelValue, (visible) => {
+    const socket = getSocket();
+    if (visible) {
+        paymentHandled.value = false;
+        socket?.on('paymentSuccess', showPaySuccess);
+        document.addEventListener('visibilitychange', onVisibilityChange);
+    } else {
+        detachPayListeners();
+        stopPolling();
+    }
+});
+
+onBeforeUnmount(() => {
+    stopPolling();
+    detachPayListeners();
+});
+
 const imageSrc = (url: string) => {
     return url;
 }
 
-//倒计时结束说明超时了，提示用户重新支付
 const tips = () => {
     ElMessage.error('支付超时，请重新支付');
     timeExpire.value = 0;
     isPay.value = false;
+    stopPolling();
 }
 
-//关闭弹框
 const close = () => {
-    modelValue.value = false; //关闭弹框
-    timeExpire.value = 0; //重置倒计时
-    isPay.value = false; //重置支付状态
+    modelValue.value = false;
+    timeExpire.value = 0;
+    isPay.value = false;
+    outTradeNo.value = '';
+    stopPolling();
 }
 
-//点击确认支付
 const onConfirm = async () => {
+    if (isPay.value) return
+    if (props.preCreatedOrder) {
+        isPay.value = true;
+        paymentHandled.value = false;
+        window.open(props.preCreatedOrder.payUrl, '_blank');
+        outTradeNo.value = props.preCreatedOrder.outTradeNo;
+        timeExpire.value = props.preCreatedOrder.timeExpire;
+        startPolling();
+        return;
+    }
     try {
         isPay.value = true;
+        paymentHandled.value = false;
         const body: CreatePayDto = {
             subject: props.course?.name || '',
             body: props.course?.description || '',
@@ -124,14 +218,17 @@ const onConfirm = async () => {
         }
         const res = await createPay(body);
         if (res.code === 200) {
-            window.open(res.data.payUrl, '_blank'); //打开支付页面
-            timeExpire.value = res.data.timeExpire; //设置倒计时
+            window.open(res.data.payUrl, '_blank');
+            outTradeNo.value = res.data.outTradeNo;
+            timeExpire.value = res.data.timeExpire;
+            startPolling();
+            // 订单已创建，保持 isPay 直至支付成功/超时/关闭
         } else {
-            ElMessage.error(res.message); //提示错误
+            ElMessage.error(res.message);
+            isPay.value = false;
         }
     } catch (error) {
         ElMessage.error('创建支付订单失败');
-    } finally {
         isPay.value = false;
     }
 }

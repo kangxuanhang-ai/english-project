@@ -1,4 +1,11 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+
+def _normalize_optional_email(value: str | None) -> str | None:
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped if stripped else None
 
 
 class UserLogin(BaseModel):
@@ -12,6 +19,11 @@ class UserRegister(BaseModel):
     email: str | None = None
     password: str
 
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, value: str | None) -> str | None:
+        return _normalize_optional_email(value)
+
 
 class UserUpdate(BaseModel):
     name: str | None = None
@@ -21,6 +33,11 @@ class UserUpdate(BaseModel):
     bio: str | None = None
     isTimingTask: bool | None = None
     timingTaskTime: str | None = None
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, value: str | None) -> str | None:
+        return _normalize_optional_email(value)
 
 
 class RefreshTokenRequest(BaseModel):

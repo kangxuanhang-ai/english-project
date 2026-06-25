@@ -1,8 +1,51 @@
-node_modules
+# Dependencies
+node_modules/
+.pnpm-store/
 
-# Environment files
+# Build outputs
+dist/
+apps/web/dist/
+apps/tracker/dist/
+*.tsbuildinfo
+
+# Python
+server/.venv/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# Environment & secrets
 .env
 .env.*
+!.env.example
 server/.env
+apps/web/.env.development
+apps/web/.env.production
 *.pem
 *.key
+
+# IDE / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!apps/web/.vscode/extensions.json
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Local tooling
+.claude/
+.mcp.json
+.mimocode/
+.cursor/
+*.tmp

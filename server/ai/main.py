@@ -29,11 +29,13 @@ async def lifespan(app: FastAPI):
     )
     start_scheduler()
     yield
-    # 关闭时清理资源
     from ai.services.chat import reset_checkpointer
     from ai.services.llm import close_http_client
+    from ai.services.recommend_cache import close_recommend_cache
+
     await reset_checkpointer()
     await close_http_client()
+    await close_recommend_cache()
 
 
 ai_app = FastAPI(title="English AI Server", version="0.1.0", lifespan=lifespan)

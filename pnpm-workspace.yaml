@@ -1,0 +1,13 @@
+packages:
+  - "packages/*"
+  - "apps/*"
+
+# core-js 的 postinstall 对本项目无必要，显式拒绝即可消除 ERR_PNPM_IGNORED_BUILDS
+allowBuilds:
+  core-js: false
+  esbuild: true
+  vue-demi: true
+
+onlyBuiltDependencies:
+  - esbuild
+  - vue-demi

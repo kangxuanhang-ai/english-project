@@ -32,9 +32,14 @@ async def disconnect(sid):
     pass
 
 
-async def emit_payment_success(user_id: str):
-    """
-    向指定用户发送支付成功通知。
-    对应 NestJS SocketGateway.emitPaymentSuccess。
-    """
-    await sio.emit("paymentSuccess", user_id, room=f"user_{user_id}")
+async def emit_payment_success(user_id: str, course_id: str, out_trade_no: str):
+    """向指定用户发送支付成功通知，payload 含订单与课程信息。"""
+    await sio.emit(
+        "paymentSuccess",
+        {
+            "userId": user_id,
+            "courseId": course_id,
+            "outTradeNo": out_trade_no,
+        },
+        room=f"user_{user_id}",
+    )

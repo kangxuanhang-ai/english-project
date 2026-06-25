@@ -8,10 +8,13 @@
          </el-icon>
          <input v-focus  placeholder="搜索" type="text" v-model="search" class="w-full h-full text-sm border-none  rounded-lg p-2 focus:outline-none" />
       </div>
-      <div v-if="wordList.length > 0" class="w-1/2 mx-auto max-h-[500px] border-t border-gray-200 overflow-y-auto">
+      <div v-if="searchLoading" class="w-1/2 mx-auto bg-white rounded-b-[10px] p-4 text-center text-sm text-gray-400">
+          搜索中…
+      </div>
+      <div v-else-if="wordList.length > 0" class="w-1/2 mx-auto max-h-[500px] border-t border-gray-200 overflow-y-auto">
           <div @click="copyWord(item.word)" v-for="item in wordList" :key="item.id" class="bg-white hover:bg-blue-50   text-gray-800 p-4 cursor-pointer shadow-sm hover:shadow-md ">
             <div class="text-sm font-semibold text-blue-600 mb-1">{{ item.word }}</div>
-            <div v-html="sanitize(item.translation)" class="text-sm text-gray-700 mb-1 overflow-hidden line-clamp-2" />
+            <div v-html="sanitize(item.translation ?? '')" class="text-sm text-gray-700 mb-1 overflow-hidden line-clamp-2" />
           </div>
       </div>
   </div>
@@ -29,8 +32,9 @@ import DOMPurify from 'dompurify'
 function sanitize(html: string): string {
     return DOMPurify.sanitize(html)
 }
-const wordList = ref<Word[]>([]) //搜索结果
-const isShow = ref(false) //用来展示弹框的显示和隐藏的
+const wordList = ref<Word[]>([])
+const isShow = ref(false)
+const searchLoading = ref(false)
 let timer: ReturnType<typeof setTimeout> | null = null
 const search = customRef((track,trigger)=>{
     let value = '' //默认值
@@ -52,9 +56,20 @@ const search = customRef((track,trigger)=>{
     }
 }) //搜索的一个值
 const getList = async () => {
-    const res = await getWordBookList({ word: search.value, page: 1, pageSize: 20 })
-    if(res.success) {
-        wordList.value = res.data.list
+    if (!search.value.trim()) {
+        wordList.value = []
+        return
+    }
+    searchLoading.value = true
+    try {
+        const res = await getWordBookList({ word: search.value, page: 1, pageSize: 20 })
+        if (res.success) {
+            wordList.value = res.data.list
+        }
+    } catch {
+        ElMessage.error('搜索失败，请重试')
+    } finally {
+        searchLoading.value = false
     }
 }
 const copyWord = (word: string) => {

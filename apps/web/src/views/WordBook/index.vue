@@ -21,7 +21,14 @@
             <el-checkbox v-model="query.ky">考研</el-checkbox>
             <el-button @click="searchWord" class="ml-10" type="primary">搜索</el-button>
         </div>
-        <div class="grid grid-cols-3 gap-2">
+        <div v-if="isLoading" class="grid grid-cols-3 gap-2">
+            <div v-for="n in 6" :key="n" class="bg-white border border-blue-100 rounded-[10px] p-4 h-[220px] animate-pulse">
+                <div class="h-4 bg-blue-100 rounded w-1/3 mb-3" />
+                <div class="h-3 bg-zinc-100 rounded w-full mb-2" />
+                <div class="h-3 bg-zinc-100 rounded w-5/6" />
+            </div>
+        </div>
+        <div v-else class="grid grid-cols-3 gap-2">
             <div class="bg-white hover:bg-blue-50 border border-blue-200 text-gray-800 rounded-[10px] p-4 cursor-pointer transition-all duration-200 shadow-sm hover:shadow-md h-[220px]"
                 v-for="item in list" :key="item.id">
                 <div class="">
@@ -31,7 +38,7 @@
                             <VideoPlay />
                         </el-icon></div>
                     <div class="text-sm text-gray-700 mb-1 overflow-hidden line-clamp-2">{{ item.definition }}</div>
-                    <div v-html="sanitize(item.translation)" class="text-sm text-gray-600 mb-1 overflow-hidden line-clamp-2">
+                    <div v-html="sanitize(item.translation ?? '')" class="text-sm text-gray-600 mb-1 overflow-hidden line-clamp-2">
                     </div>
                     <div class="text-sm text-gray-600 mt-3 flex items-center gap-2 flex-wrap">
                         <el-tag v-if="item.gk" type="primary" size="small">高考</el-tag>

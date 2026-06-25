@@ -23,3 +23,7 @@ export interface RecommendData {
 
 export const getRecommend = (force = false) =>
     aiApi.get('/recommend', { params: { force } }) as Promise<Response<RecommendData>>;
+
+/** 清除 AI 推荐缓存（打卡/学词/购课后调用） */
+export const clearRecommendCache = () =>
+    aiApi.post('/recommend/cache/clear') as Promise<Response<null>>;

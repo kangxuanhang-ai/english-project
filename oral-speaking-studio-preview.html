@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>口语考官 · Mic-Only Preview</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,600;1,500&family=Source+Serif+4:wght@600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      /* oral 角色主题 — 与 roleConfig.ts 一致 */
+      --chat-accent: #0d9488;
+      --chat-accent-dark: #0f766e;
+      --chat-accent-light: #2dd4bf;
+      --chat-accent-soft: #f0fdfa;
+      --chat-accent-border: #99f6e4;
+      --chat-accent-text: #115e59;
+      --chat-glow: #0d948833;
+      --chat-bubble-shadow: 0 4px 14px #0d948840;
+    }
+
+    html, body {
+      height: 100%;
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #f4f4f5;
+      color: #374151;
+    }
+
+    /* 顶部说明条 */
+    .preview-bar {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+      padding: 8px 20px;
+      background: rgba(255,255,255,.95);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid #e4e4e7;
+      font-size: 12px; color: #71717a;
+    }
+    .preview-bar strong { color: #0d9488; font-weight: 700; }
+    .preview-bar kbd {
+      padding: 2px 6px; border-radius: 5px;
+      background: #f4f4f5; border: 1px solid #e4e4e7;
+      font-family: inherit; font-size: 11px;
+    }
+
+    .page-wrap {
+      min-height: 100vh;
+      padding: 52px 16px 24px;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+    }
+
+    /* ===== 与 Chat/index.vue 一致的 shell ===== */
+    .chat-shell {
+      position: relative;
+      width: 1200px;
+      max-width: 100%;
+      display: flex;
+      height: calc(100vh - 96px);
+      min-height: 680px;
+      border-radius: 24px;
+      overflow: hidden;
+      background: #fff;
+      box-shadow: 0 0 0 1px rgba(0,0,0,.04), 0 12px 40px rgba(0,0,0,.08);
+    }
+
+    /* ===== 左栏：角色 ===== */
+    .role-list {
+      width: 208px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid #e5e7eb;
+      background: linear-gradient(180deg, #fafaff, #f5f4ff);
+    }
+    .role-list-head {
+      padding: 20px 16px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #6b7280;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .role-items { flex: 1; overflow-y: auto; padding: 0 12px 12px; }
+    .role-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 8px; margin-bottom: 2px;
+      border-radius: 8px; border: 1px solid transparent;
+      border-left: 3px solid transparent;
+      cursor: default; transition: all .2s;
+    }
+    .role-item:hover:not(.active) { background: rgba(255,255,255,.6); }
+    .role-item.active {
+      background: var(--chat-accent-soft);
+      border-color: var(--chat-accent-border);
+      border-left-color: var(--chat-accent);
+      box-shadow: 0 0 0 1px var(--chat-glow);
+    }
+    /* 口语考官选中：与项目 oral 一致，不过度装饰 */
+    .role-item--oral.active .role-icon {
+      box-shadow: 0 2px 10px rgba(13,148,136,.25);
+    }
+    .role-icon {
+      width: 38px; height: 38px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; flex-shrink: 0;
+    }
+    .role-name { font-size: 13px; font-weight: 600; color: #1f2937; line-height: 1.3; }
+    .role-desc { font-size: 11px; color: #9ca3af; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
+
+    /* ===== 中栏：对话列表 ===== */
+    .conv-list {
+      width: 268px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid #e5e7eb;
+      background: #fefefe;
+    }
+    .conv-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 20px 16px 12px;
+    }
+    .conv-head span { font-size: 13px; font-weight: 700; color: #6b7280; }
+    .conv-new {
+      width: 30px; height: 30px; border-radius: 10px; border: none;
+      color: #fff; font-size: 18px; line-height: 1; cursor: pointer;
+      background: linear-gradient(135deg, var(--chat-accent-light), var(--chat-accent));
+      box-shadow: 0 2px 8px var(--chat-glow);
+    }
+    .conv-items { flex: 1; overflow-y: auto; padding: 0 12px 12px; }
+    .conv-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 12px; margin-bottom: 2px;
+      border-radius: 8px; border: 1px solid transparent;
+      cursor: pointer; transition: all .2s;
+    }
+    .conv-item:hover:not(.active) { background: rgba(250,250,249,.8); }
+    .conv-item.active {
+      background: var(--chat-accent-soft);
+      border-color: var(--chat-accent-border);
+    }
+    .conv-dot {
+      width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+      background: var(--chat-accent);
+      box-shadow: 0 0 6px var(--chat-glow);
+    }
+    .conv-title {
+      font-size: 13px; color: #374151; line-height: 1.4;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .conv-item:not(.active) .conv-dot { display: none; }
+
+    /* ===== 右栏：浅色对话区 + 底部暗色麦克风舞台 ===== */
+    .chat-main--studio {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+      background: linear-gradient(165deg, #f0fdfa 0%, #faf9f6 42%, #ecfdf5 100%);
+      color: #374151;
+    }
+    .chat-main--studio::before {
+      content: '';
+      position: absolute; top: -60px; right: -40px;
+      width: 420px; height: 420px;
+      background: radial-gradient(circle, rgba(45,212,191,.18) 0%, transparent 68%);
+      pointer-events: none;
+    }
+
+    /* 简洁顶栏 — 与项目 ChatTopbar 一致 */
+    .studio-header {
+      position: relative; z-index: 2; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 12px 20px;
+      border-bottom: 1px solid rgba(153,246,228,.8);
+      background: linear-gradient(90deg, rgba(240,253,250,.92), rgba(255,255,255,.85));
+      backdrop-filter: blur(8px);
+    }
+    .studio-header-main { flex: 1; min-width: 0; }
+    .studio-eyebrow {
+      font-size: 10px; font-weight: 700; letter-spacing: .16em;
+      text-transform: uppercase; color: rgba(13,148,136,.75); margin-bottom: 2px;
+    }
+    .studio-title {
+      font-size: 15px; font-weight: 600; color: #042f2e;
+      line-height: 1.35;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .live-badge {
+      display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
+      padding: 5px 12px; border-radius: 999px;
+      font-size: 11px; font-weight: 700; color: #115e59;
+      background: rgba(204,251,241,.85);
+      border: 1px solid rgba(153,246,228,.8);
+    }
+    .live-badge-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: #10b981;
+      animation: live-pulse 2s ease-in-out infinite;
+    }
+    @keyframes live-pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: .65; transform: scale(1.15); }
+    }
+
+    /* Messages — 与项目 oral 气泡一致 */
+    .messages {
+      position: relative; z-index: 1;
+      flex: 1; overflow-y: auto;
+      padding: 16px 20px 8px;
+      scroll-behavior: smooth;
+    }
+    .messages::-webkit-scrollbar { width: 4px; }
+    .messages::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
+    .messages-inner { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+
+    @keyframes msg-in {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .msg-in { animation: msg-in .25s ease both; }
+
+    /* User bubble */
+    .msg-user {
+      display: flex; flex-direction: row-reverse; align-items: flex-end; gap: 14px;
+    }
+    .avatar {
+      width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
+      border: 2px solid #fff;
+      box-shadow: 0 0 0 1px var(--chat-accent-border);
+      object-fit: cover; background: #e5e7eb;
+    }
+    .user-col { display: flex; flex-direction: column; align-items: flex-end; max-width: min(72%, 480px); }
+    .user-label {
+      font-size: 10px; font-weight: 700; letter-spacing: .08em;
+      text-transform: uppercase; color: rgba(13,148,136,.65);
+      margin-bottom: 4px; margin-right: 4px;
+    }
+    .user-bubble {
+      padding: 12px 18px; border-radius: 20px 20px 6px 20px;
+      font-size: 14px; line-height: 1.65; color: #fff;
+      background: linear-gradient(145deg, #5eead4 0%, #0d9488 55%, #0f766e 100%);
+      box-shadow: 0 4px 18px rgba(13,148,136,.35), inset 0 1px 0 rgba(255,255,255,.2);
+    }
+
+    /* AI examiner card */
+    .msg-ai { display: flex; align-items: flex-start; gap: 14px; }
+    .ai-card-wrap { flex: 1; min-width: 0; max-width: 85%; }
+    .ai-card {
+      position: relative; overflow: hidden;
+      border-radius: 18px;
+      background: linear-gradient(135deg, #fff, rgba(240,253,250,.5));
+      border: 1px solid rgba(153,246,228,.8);
+      box-shadow: 0 2px 8px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.03);
+    }
+    .ai-card-bar {
+      height: 3px;
+      background: linear-gradient(90deg, #5eead4, #0d9488, #059669);
+    }
+    .ai-card-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 18px;
+      border-bottom: 1px solid rgba(153,246,228,.8);
+    }
+    .ai-card-head-left {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; font-weight: 700; color: #134e4a;
+    }
+    .ai-card-head-left .dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: #14b8a6;
+      box-shadow: 0 0 6px rgba(20,184,166,.5);
+    }
+    .ai-en-tag {
+      font-size: 10px; font-weight: 600;
+      padding: 2px 8px; border-radius: 999px;
+      background: #ccfbf1; color: #0f766e;
+    }
+    .ai-card-body {
+      padding: 14px 18px;
+      font-size: 13px; line-height: 1.65; color: #374151;
+    }
+    .ai-card-body strong { color: #111827; font-weight: 600; }
+    .ai-card-body em { color: #0f766e; font-style: italic; }
+    .ai-card-foot {
+      display: flex; justify-content: flex-end;
+      padding: 8px 18px 12px;
+      border-top: 1px solid rgba(0,0,0,.04);
+    }
+    .read-btn {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 4px 10px; border-radius: 8px;
+      font-size: 11px; color: #78716c;
+      background: transparent; border: 1px solid #e7e5e4;
+      cursor: pointer; font-family: inherit;
+      transition: background .15s;
+    }
+    .read-btn:hover { background: #fafaf9; }
+    .read-btn.active { color: #0d9488; border-color: #99f6e4; background: #f0fdfa; }
+
+    /* ===== 底部暗色麦克风舞台（唯一高级感区域）===== */
+    .mic-stage-panel {
+      position: relative; z-index: 2; flex-shrink: 0;
+      margin-top: auto;
+      border-radius: 28px 28px 0 0;
+      overflow: hidden;
+      background: linear-gradient(180deg, #0c1a17 0%, #071412 100%);
+      box-shadow: 0 -12px 40px rgba(7,20,18,.35), 0 -1px 0 rgba(45,212,191,.12) inset;
+    }
+    .mic-stage-panel::before {
+      content: '';
+      position: absolute; inset: 0; pointer-events: none; opacity: .035;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+    .mic-stage-glow {
+      position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+      width: 320px; height: 160px;
+      background: radial-gradient(ellipse, rgba(45,212,191,.18) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .mic-dock {
+      position: relative;
+      padding: 18px 22px 22px;
+    }
+
+    .dock-center {
+      display: flex; flex-direction: column; align-items: center;
+      max-width: 720px; margin: 0 auto;
+    }
+    .status-line {
+      font-size: 13px; font-weight: 500; color: rgba(236,253,245,.4);
+      margin-bottom: 16px; min-height: 20px; text-align: center;
+      transition: color .3s;
+    }
+    .status-line.active { color: #99f6e4; }
+    .status-line.listening { color: #5eead4; }
+
+    .live-transcript {
+      max-width: 480px; width: 100%; margin-bottom: 10px;
+      text-align: center; font-size: 15px; line-height: 1.5; color: #99f6e4;
+      opacity: 0; transform: translateY(8px); transition: all .35s ease;
+      min-height: 0;
+    }
+    .live-transcript.visible { opacity: 1; transform: translateY(0); min-height: 24px; }
+    .live-transcript .cursor {
+      display: inline-block; width: 2px; height: 1em;
+      background: #2dd4bf; margin-left: 2px; vertical-align: text-bottom;
+      animation: blink 1s step-end infinite;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    .ai-wave {
+      display: none; align-items: center; gap: 4px; margin-bottom: 10px;
+    }
+    .ai-wave.visible { display: flex; }
+    .ai-wave span {
+      width: 4px; border-radius: 999px; background: #2dd4bf;
+      animation: ai-bar 1.2s ease-in-out infinite;
+    }
+    .ai-wave span:nth-child(1) { height: 8px; }
+    .ai-wave span:nth-child(2) { height: 16px; animation-delay: .15s; }
+    .ai-wave span:nth-child(3) { height: 24px; animation-delay: .3s; }
+    .ai-wave span:nth-child(4) { height: 16px; animation-delay: .45s; }
+    .ai-wave span:nth-child(5) { height: 8px; animation-delay: .6s; }
+    @keyframes ai-bar {
+      0%, 100% { transform: scaleY(.5); opacity: .4; }
+      50% { transform: scaleY(1); opacity: 1; }
+    }
+
+    .stop-reading {
+      display: none; align-items: center; justify-content: center; gap: 8px;
+      margin-bottom: 14px; padding: 8px 20px;
+      border-radius: 999px;
+      border: 1px solid rgba(251,113,133,.35);
+      background: rgba(244,63,94,.1); color: #fda4af;
+      font-family: inherit; font-size: 13px; font-weight: 600;
+      cursor: pointer; transition: all .2s;
+      box-shadow: 0 0 24px -8px rgba(244,63,94,.35);
+    }
+    .stop-reading.visible { display: inline-flex; animation: msg-in .35s ease both; }
+    .stop-reading:hover { background: rgba(244,63,94,.18); color: #fecdd3; transform: scale(1.02); }
+
+    .mic-stage {
+      position: relative;
+      width: 168px; height: 168px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    /* 外圈轨道 */
+    .mic-orbit {
+      position: absolute; inset: 4px; border-radius: 50%;
+      border: 1px dashed rgba(45,212,191,.15);
+    }
+    .mic-stage[data-state="listening"] .mic-orbit,
+    .mic-stage[data-state="speaking-user"] .mic-orbit {
+      animation: orbit-spin 20s linear infinite;
+      border-color: rgba(45,212,191,.35);
+    }
+    @keyframes orbit-spin { to { transform: rotate(360deg); } }
+    .ring {
+      position: absolute; inset: 0; border-radius: 50%;
+      border: 1px solid rgba(45,212,191,.4);
+      opacity: 0; pointer-events: none;
+    }
+    .mic-stage[data-state="listening"] .ring,
+    .mic-stage[data-state="speaking-user"] .ring {
+      animation: ripple 2.4s ease-out infinite;
+    }
+    .mic-stage[data-state="listening"] .ring:nth-child(2),
+    .mic-stage[data-state="speaking-user"] .ring:nth-child(2) { animation-delay: 0s; }
+    .mic-stage[data-state="listening"] .ring:nth-child(3),
+    .mic-stage[data-state="speaking-user"] .ring:nth-child(3) { animation-delay: .6s; }
+    .mic-stage[data-state="listening"] .ring:nth-child(4),
+    .mic-stage[data-state="speaking-user"] .ring:nth-child(4) { animation-delay: 1.2s; }
+    @keyframes ripple {
+      0% { transform: scale(.55); opacity: .6; }
+      100% { transform: scale(1.35); opacity: 0; }
+    }
+
+    .wave-ring { position: absolute; width: 100%; height: 100%; pointer-events: none; }
+    .wave-bar {
+      position: absolute; left: 50%; top: 50%;
+      width: 3px; height: 8px; margin-left: -1.5px; margin-top: -76px;
+      transform-origin: center 76px; border-radius: 999px;
+      background: linear-gradient(180deg, #99f6e4, #0d9488);
+      opacity: .2; transition: height .08s, opacity .08s;
+    }
+    .mic-stage[data-state="listening"] .wave-bar,
+    .mic-stage[data-state="speaking-user"] .wave-bar { opacity: .85; }
+
+    .mic-btn {
+      position: relative; z-index: 5;
+      width: 88px; height: 88px; border-radius: 50%; border: none; cursor: pointer;
+      background: linear-gradient(145deg, #5eead4 0%, #0d9488 45%, #065f46 100%);
+      box-shadow:
+        0 0 0 1px rgba(255,255,255,.15) inset,
+        0 8px 32px rgba(13,148,136,.55),
+        0 0 60px rgba(45,212,191,.3);
+      display: flex; align-items: center; justify-content: center;
+      transition: transform .2s cubic-bezier(.34,1.56,.64,1), box-shadow .3s;
+    }
+    .mic-btn:hover {
+      transform: scale(1.05);
+      box-shadow:
+        0 0 0 1px rgba(255,255,255,.18) inset,
+        0 12px 40px rgba(13,148,136,.65),
+        0 0 80px rgba(45,212,191,.4);
+    }
+    .mic-btn:active { transform: scale(.96); }
+    .mic-stage[data-state="listening"] .mic-btn,
+    .mic-stage[data-state="speaking-user"] .mic-btn {
+      animation: mic-breathe 1.8s ease-in-out infinite;
+    }
+    .mic-stage[data-state="processing"] .mic-btn {
+      background: linear-gradient(145deg, #94a3b8, #64748b);
+      animation: none;
+    }
+    .mic-stage[data-state="ai-speaking"] .mic-btn {
+      background: linear-gradient(145deg, #818cf8, #4338ca);
+      box-shadow: 0 0 0 1px rgba(255,255,255,.12) inset, 0 8px 32px rgba(67,56,202,.5), 0 0 60px rgba(129,140,248,.25);
+      animation: mic-breathe 2.2s ease-in-out infinite;
+    }
+    @keyframes mic-breathe {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.06); }
+    }
+    .mic-btn svg { width: 32px; height: 32px; color: #fff; filter: drop-shadow(0 2px 4px rgba(0,0,0,.25)); }
+
+    .mic-hint {
+      margin-top: 14px; text-align: center;
+      font-size: 10.5px; font-weight: 500; color: rgba(236,253,245,.28);
+      letter-spacing: .04em;
+    }
+  </style>
+</head>
+<body>
+  <div class="preview-bar">
+    <strong>口语考官 · Speaking Studio 原型</strong>
+    <span>对话区跟项目一致 · 底部暗色麦克风舞台 = 口语专属</span>
+    <span style="margin-left:auto">点击麦克风说话 · 朗读中可 Stop · 按住 <kbd>Space</kbd></span>
+  </div>
+
+  <div class="page-wrap">
+    <div class="chat-shell">
+      <!-- 左：角色 -->
+      <aside class="role-list">
+        <div class="role-list-head">角色</div>
+        <div class="role-items">
+          <div class="role-item">
+            <div class="role-icon" style="background:linear-gradient(135deg,#818cf8,#6366f1)">🧠</div>
+            <div><div class="role-name">智能助手</div><div class="role-desc">查词·语法·搜索</div></div>
+          </div>
+          <div class="role-item">
+            <div class="role-icon" style="background:linear-gradient(135deg,#a78bfa,#7c3aed)">🎓</div>
+            <div><div class="role-name">英语大师</div><div class="role-desc">专业术语，英文回复</div></div>
+          </div>
+          <div class="role-item">
+            <div class="role-icon" style="background:linear-gradient(135deg,#60a5fa,#2563eb)">💼</div>
+            <div><div class="role-name">商务英语</div><div class="role-desc">商务场景对话</div></div>
+          </div>
+          <div class="role-item">
+            <div class="role-icon" style="background:linear-gradient(135deg,#fb7185,#e11d48)">🤣</div>
+            <div><div class="role-name">麒麟哥</div><div class="role-desc">搞笑风格回复</div></div>
+          </div>
+          <div class="role-item">
+            <div class="role-icon" style="background:linear-gradient(135deg,#22d3ee,#0891b2)">💻</div>
+            <div><div class="role-name">小满模式</div><div class="role-desc">程序员术语</div></div>
+          </div>
+          <div class="role-item active role-item--oral">
+            <div class="role-icon" style="background:linear-gradient(135deg,#2dd4bf,#0d9488)">🎙️</div>
+            <div><div class="role-name">口语考官</div><div class="role-desc">英文陪练·纠错</div></div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- 中：对话 -->
+      <aside class="conv-list">
+        <div class="conv-head">
+          <span>对话</span>
+          <button type="button" class="conv-new" title="新对话">+</button>
+        </div>
+        <div class="conv-items">
+          <div class="conv-item active">
+            <span class="conv-dot"></span>
+            <span class="conv-title">全盘承认对方观点无反驳</span>
+          </div>
+          <div class="conv-item">
+            <span class="conv-title">Tell me about your hometown</span>
+          </div>
+          <div class="conv-item">
+            <span class="conv-title">Job interview practice</span>
+          </div>
+        </div>
+      </aside>
+
+      <!-- 右：口语考官专属录音棚 -->
+      <main class="chat-main--studio">
+        <header class="studio-header">
+          <div class="studio-header-main">
+            <div class="studio-eyebrow">Speaking Studio</div>
+            <div class="studio-title">全盘承认对方观点无反驳</div>
+          </div>
+          <span class="live-badge">
+            <span class="live-badge-dot"></span>
+            LIVE · 🎙️ 口语考官
+          </span>
+        </header>
+
+        <div class="messages" id="messages">
+          <div class="messages-inner" id="messagesInner">
+            <!-- 用户消息 -->
+            <div class="msg-user msg-in">
+              <img class="avatar" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect fill='%23e5e7eb' width='40' height='40'/%3E%3Ccircle cx='20' cy='16' r='7' fill='%239ca3af'/%3E%3Cellipse cx='20' cy='34' rx='12' ry='9' fill='%239ca3af'/%3E%3C/svg%3E" alt="" />
+              <div class="user-col">
+                <span class="user-label">You said</span>
+                <div class="user-bubble">awesome name</div>
+              </div>
+            </div>
+
+            <!-- 考官反馈 -->
+            <div class="msg-ai msg-in">
+              <img class="avatar" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect fill='%23ccfbf1' width='40' height='40'/%3E%3Ctext x='20' y='26' text-anchor='middle' font-size='20'%3E🎙️%3C/text%3E%3C/svg%3E" alt="" />
+              <div class="ai-card-wrap">
+                <div class="ai-card">
+                  <div class="ai-card-bar"></div>
+                  <div class="ai-card-head">
+                    <div class="ai-card-head-left">
+                      <span class="dot"></span>
+                      🎙️ Examiner Feedback
+                    </div>
+                    <span class="ai-en-tag">EN</span>
+                  </div>
+                  <div class="ai-card-body" id="lastAiBody">
+                    <strong>Awesome name</strong> — natural and enthusiastic! 👍<br><br>
+                    Try expanding: <em>"That's an awesome name! Where does it come from?"</em><br><br>
+                    Now — <strong>what's your full name, and do you like it?</strong>
+                  </div>
+                  <div class="ai-card-foot">
+                    <button type="button" class="read-btn" id="cardReadBtn">🔊 Read aloud</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 口语专属：底部暗色麦克风舞台 -->
+        <div class="mic-stage-panel">
+          <div class="mic-stage-glow"></div>
+          <footer class="mic-dock">
+            <div class="dock-center">
+            <div class="ai-wave" id="aiWave">
+              <span></span><span></span><span></span><span></span><span></span>
+            </div>
+            <div class="live-transcript" id="liveTranscript"></div>
+            <p class="status-line" id="statusLine">Tap the microphone to speak</p>
+            <button type="button" class="stop-reading" id="stopReadingBtn">
+              ■ Stop reading
+            </button>
+            <div class="mic-stage" id="micStage" data-state="idle">
+              <div class="mic-orbit"></div>
+              <div class="ring"></div>
+              <div class="ring"></div>
+              <div class="ring"></div>
+              <div class="wave-ring" id="waveRing"></div>
+              <button type="button" class="mic-btn" id="micBtn" aria-label="Tap to speak">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                  <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                  <line x1="12" x2="12" y1="19" y2="22"/>
+                </svg>
+              </button>
+            </div>
+            <p class="mic-hint">Voice only · Auto-read · Tap mic or hold Space</p>
+          </div>
+        </footer>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    const micStage = document.getElementById('micStage');
+    const micBtn = document.getElementById('micBtn');
+    const statusLine = document.getElementById('statusLine');
+    const liveTranscript = document.getElementById('liveTranscript');
+    const aiWave = document.getElementById('aiWave');
+    const messagesInner = document.getElementById('messagesInner');
+    const messages = document.getElementById('messages');
+    const waveRing = document.getElementById('waveRing');
+    const stopReadingBtn = document.getElementById('stopReadingBtn');
+    const cardReadBtn = document.getElementById('cardReadBtn');
+    const lastAiBody = document.getElementById('lastAiBody');
+
+    const BAR_COUNT = 32;
+    const bars = [];
+    for (let i = 0; i < BAR_COUNT; i++) {
+      const bar = document.createElement('div');
+      bar.className = 'wave-bar';
+      bar.style.transform = `rotate(${(360 / BAR_COUNT) * i}deg)`;
+      waveRing.appendChild(bar);
+      bars.push(bar);
+    }
+
+    let state = 'idle';
+    let animFrame = null;
+    let recognition = null;
+    let finalTranscript = '';
+    let ttsEndTimer = null;
+
+    const demoReplies = [
+      'Nice! You said "awesome name" — try: "That\'s an awesome name! Where does it come from?" Now tell me your full name.',
+      'Good energy! Watch article use: say "That is an awesome name" not just "awesome name". Can you introduce yourself in two sentences?',
+    ];
+    let replyIndex = 0;
+
+    function plainText(el) {
+      return el.innerText.replace(/\s+/g, ' ').trim();
+    }
+
+    function setState(next) {
+      state = next;
+      micStage.dataset.state = next;
+      aiWave.classList.toggle('visible', next === 'ai-speaking');
+      stopReadingBtn.classList.toggle('visible', next === 'ai-speaking');
+      cardReadBtn.classList.toggle('active', next === 'ai-speaking');
+      cardReadBtn.textContent = next === 'ai-speaking' ? '🔊 Reading…' : '🔊 Read aloud';
+      if (next !== 'listening' && next !== 'speaking-user') stopWaveAnim();
+      else startWaveAnim();
+    }
+
+    function resetToIdle() {
+      if (ttsEndTimer) { clearTimeout(ttsEndTimer); ttsEndTimer = null; }
+      if ('speechSynthesis' in window) speechSynthesis.cancel();
+      setState('idle');
+      updateStatus('Tap the microphone to speak');
+      cardReadBtn.classList.remove('active');
+      cardReadBtn.textContent = '🔊 Read aloud';
+    }
+
+    function stopReading() {
+      if (state !== 'ai-speaking') return;
+      resetToIdle();
+    }
+
+    function speakText(text) {
+      if (!('speechSynthesis' in window)) {
+        setState('ai-speaking');
+        updateStatus('Examiner is reading aloud — tap Stop to interrupt', 'active');
+        ttsEndTimer = setTimeout(resetToIdle, 2800);
+        return;
+      }
+      speechSynthesis.cancel();
+      setState('ai-speaking');
+      updateStatus('Examiner is reading aloud — tap Stop to interrupt', 'active');
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'en-US';
+      u.onend = () => { if (state === 'ai-speaking') resetToIdle(); };
+      u.onerror = () => { if (state === 'ai-speaking') resetToIdle(); };
+      speechSynthesis.speak(u);
+    }
+
+    function startWaveAnim() {
+      stopWaveAnim();
+      const tick = () => {
+        bars.forEach((bar, i) => {
+          const base = 6 + Math.sin(Date.now() / 200 + i * 0.5) * 4;
+          const jitter = Math.random() * 16;
+          bar.style.height = `${base + jitter}px`;
+        });
+        animFrame = requestAnimationFrame(tick);
+      };
+      tick();
+    }
+    function stopWaveAnim() {
+      if (animFrame) cancelAnimationFrame(animFrame);
+      animFrame = null;
+      bars.forEach(bar => { bar.style.height = '8px'; });
+    }
+
+    function updateStatus(text, cls = '') {
+      statusLine.textContent = text;
+      statusLine.className = 'status-line ' + cls;
+    }
+
+    function addUserMessage(text) {
+      const wrap = document.createElement('div');
+      wrap.className = 'msg-user msg-in';
+      wrap.innerHTML = `
+        <img class="avatar" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect fill='%23e5e7eb' width='40' height='40'/%3E%3Ccircle cx='20' cy='16' r='7' fill='%239ca3af'/%3E%3Cellipse cx='20' cy='34' rx='12' ry='9' fill='%239ca3af'/%3E%3C/svg%3E" alt="" />
+        <div class="user-col">
+          <span class="user-label">You said</span>
+          <div class="user-bubble">${text.replace(/</g, '&lt;')}</div>
+        </div>`;
+      messagesInner.appendChild(wrap);
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    function addAiMessage(html) {
+      const wrap = document.createElement('div');
+      wrap.className = 'msg-ai msg-in';
+      wrap.innerHTML = `
+        <img class="avatar" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect fill='%23ccfbf1' width='40' height='40'/%3E%3Ctext x='20' y='26' text-anchor='middle' font-size='20'%3E🎙️%3C/text%3E%3C/svg%3E" alt="" />
+        <div class="ai-card-wrap">
+          <div class="ai-card">
+            <div class="ai-card-bar"></div>
+            <div class="ai-card-head">
+              <div class="ai-card-head-left"><span class="dot"></span>🎙️ Examiner Feedback</div>
+              <span class="ai-en-tag">EN</span>
+            </div>
+            <div class="ai-card-body ai-reply-body">${html}</div>
+            <div class="ai-card-foot">
+              <button type="button" class="read-btn card-read-dynamic">🔊 Read aloud</button>
+            </div>
+          </div>
+        </div>`;
+      messagesInner.appendChild(wrap);
+      messages.scrollTop = messages.scrollHeight;
+      const btn = wrap.querySelector('.card-read-dynamic');
+      const body = wrap.querySelector('.ai-reply-body');
+      btn.addEventListener('click', () => {
+        if (state === 'ai-speaking') stopReading();
+        else speakText(plainText(body));
+      });
+      return body;
+    }
+
+    function showTranscript(text, partial = false) {
+      liveTranscript.classList.add('visible');
+      liveTranscript.innerHTML = text + (partial ? '<span class="cursor"></span>' : '');
+    }
+    function hideTranscript() {
+      liveTranscript.classList.remove('visible');
+      liveTranscript.innerHTML = '';
+    }
+
+    function startListening() {
+      if (state !== 'idle') return;
+      finalTranscript = '';
+      setState('listening');
+      updateStatus('Listening… speak now', 'listening');
+
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SR) {
+        recognition = new SR();
+        recognition.lang = 'en-US';
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.onresult = (e) => {
+          let interim = '';
+          for (let i = e.resultIndex; i < e.results.length; i++) {
+            const t = e.results[i][0].transcript;
+            if (e.results[i].isFinal) finalTranscript += t;
+            else interim += t;
+          }
+          showTranscript(finalTranscript + interim, !!interim);
+          setState('speaking-user');
+        };
+        recognition.onerror = () => finishListening(finalTranscript || 'I think the name is really cool.');
+        recognition.onend = () => {
+          if (state === 'listening' || state === 'speaking-user') {
+            finishListening(finalTranscript || 'I think the name is really cool.');
+          }
+        };
+        try { recognition.start(); } catch { simulateListen(); }
+      } else {
+        simulateListen();
+      }
+    }
+
+    function simulateListen() {
+      const demo = 'I think the name is really cool.';
+      let i = 0;
+      setState('speaking-user');
+      const iv = setInterval(() => {
+        if (state !== 'listening' && state !== 'speaking-user') { clearInterval(iv); return; }
+        i++;
+        showTranscript(demo.slice(0, i), i < demo.length);
+        if (i >= demo.length) { clearInterval(iv); finalTranscript = demo; }
+      }, 55);
+    }
+
+    function stopListening() {
+      if (state !== 'listening' && state !== 'speaking-user') return;
+      if (recognition) { try { recognition.stop(); } catch {} recognition = null; }
+      finishListening(finalTranscript || liveTranscript.textContent || 'I think the name is really cool.');
+    }
+
+    function finishListening(text) {
+      hideTranscript();
+      setState('processing');
+      updateStatus('Processing your speech…', 'active');
+      addUserMessage(text.trim());
+
+      setTimeout(() => {
+        const reply = demoReplies[replyIndex % demoReplies.length];
+        replyIndex++;
+        const bodyEl = addAiMessage(reply);
+        setTimeout(() => speakText(bodyEl.innerText), 500);
+      }, 1100);
+    }
+
+    stopReadingBtn.addEventListener('click', stopReading);
+    cardReadBtn.addEventListener('click', () => {
+      if (state === 'ai-speaking') stopReading();
+      else speakText(plainText(lastAiBody));
+    });
+
+    micBtn.addEventListener('click', () => {
+      if (state === 'idle') startListening();
+      else if (state === 'listening' || state === 'speaking-user') stopListening();
+      else if (state === 'ai-speaking') stopReading();
+    });
+
+    let spaceHeld = false;
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' && !spaceHeld && state === 'idle') {
+        e.preventDefault(); spaceHeld = true; startListening();
+      }
+    });
+    document.addEventListener('keyup', (e) => {
+      if (e.code === 'Space' && spaceHeld) {
+        spaceHeld = false;
+        if (state === 'listening' || state === 'speaking-user') stopListening();
+      }
+    });
+  </script>
+</body>
+</html>

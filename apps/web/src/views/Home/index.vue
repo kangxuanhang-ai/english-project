@@ -12,6 +12,7 @@
                         @click="showLogin"
                         class="bg-indigo-700 text-white rounded-[100px] px-4 py-2 cursor-pointer text-sm block w-30 h-10">立即学习</button>
                     <button
+                        @click="router.push('/courses/index')"
                         class="bg-indigo-700 text-white rounded-[100px] px-4 py-2 cursor-pointer text-sm block w-30 h-10">查看课程</button>
                 </div>
                 <div class="flex items-center gap-4 pt-4">
@@ -45,7 +46,10 @@
         </div>
         <!-- AI 推荐卡片 -->
         <div v-if="userStore.getUser" class="mt-6">
-            <RecommendCard compact />
+            <RecommendCard ref="recommendCardRef" compact @buy="onRecommendBuy" @learn="onRecommendLearn" />
+        </div>
+        <div v-if="userStore.getUser" class="mt-6">
+            <LearningDashboard ref="dashboardRef" />
         </div>
         <!-- 描述区域 -->
         <div class="rounded-[20px] p-10 text-center">
@@ -104,6 +108,7 @@
                 </div>
             </div>
         </div>
+        <CoursePay v-model="payVisible" :course="selectedCourse" @success="onPaySuccess" />
     </div>
 </template>
 
@@ -112,10 +117,45 @@
 import Hologram from './components/Hologram.vue'
 import RecommendCard from '@/components/RecommendCard.vue'
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useLogin } from '@/hooks/useLogin'
 import { checkIn } from '@/apis/user'
 import { useUserStore } from '@/stores/user'
 import { ElMessage } from 'element-plus'
+import CoursePay from '@/views/Course/components/Pay.vue'
+import LearningDashboard from './components/LearningDashboard.vue'
+import type { Course } from '@en/common/course'
+import type { CourseBatchStatus } from '@en/common/course'
+import { useCourseAction } from '@/hooks/useCourseAction'
+import { useTracker } from '@/hooks/useTracker'
+import { syncLearningToAi } from '@/utils/learningSync'
+
+const router = useRouter()
+const tracker = useTracker()
+const { goLearn, toCourse } = useCourseAction()
+const payVisible = ref(false)
+const selectedCourse = ref<Course | null>(null)
+const dashboardRef = ref<InstanceType<typeof LearningDashboard> | null>(null)
+const recommendCardRef = ref<InstanceType<typeof RecommendCard> | null>(null)
+
+const refreshLearningViews = async () => {
+    await syncLearningToAi()
+    void dashboardRef.value?.reload()
+    void recommendCardRef.value?.reload()
+}
+
+const onRecommendBuy = (c: CourseBatchStatus) => {
+    selectedCourse.value = toCourse(c)
+    payVisible.value = true
+}
+
+const onRecommendLearn = (c: CourseBatchStatus) => {
+    goLearn(c)
+}
+
+const onPaySuccess = () => {
+    void refreshLearningViews()
+}
 const { login } = useLogin()
 const userStore = useUserStore()
 const isCheckedIn = computed(() => userStore.isCheckedIn)
@@ -135,10 +175,12 @@ const handleCheckIn = async () => {
                 userStore.lastCheckInDate = new Date().toISOString().slice(0, 10)
                 isAnimating.value = true
                 setTimeout(() => { isAnimating.value = false }, 1000)
+                void tracker.trackEvent('check_in', { dayNumber: res.data.dayNumber })
             } else {
                 // 后端说已打卡，也同步状态
                 userStore.lastCheckInDate = new Date().toISOString().slice(0, 10)
             }
+            void refreshLearningViews()
             ElMessage.success(res.message)
         }
     } catch (e) {
@@ -256,9 +298,7 @@ const initProject = (gsap: any, ScrollTrigger: any) => {
 }
 
 const showLogin = () => {
-     login().then(() => {
-        console.log('登录成功之后跳转页面')
-     })
+    void login()
 }
 
 onMounted(async () => {

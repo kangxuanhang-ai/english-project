@@ -10,11 +10,8 @@
                 <div class="flex-1 flex flex-col justify-center px-12 py-10 bg-white">
                     <LoginForm v-if="loginType === 'login'" />
                     <RegisterForm v-if="loginType === 'register'" />
-                    <div class="mt-6 text-center">
-                        <div class="flex items-center justify-center gap-4 text-sm text-gray-500">
-                            <span class="cursor-pointer hover:text-indigo-600 transition-colors">忘记密码？</span>
-                            <span class="text-gray-300">|</span>
-                        </div>
+                    <div v-if="loginType === 'login'" class="mt-6 text-center">
+                        <p class="text-sm text-gray-400">忘记密码功能暂未开放，请联系管理员</p>
                     </div>
                 </div>
             </div>

@@ -3,31 +3,35 @@ from sqlalchemy.orm import DeclarativeBase
 
 from app.config import settings
 
-# async engine — 使用 asyncpg 驱动
+
+def normalize_database_url(url: str) -> str:
+    """兼容 postgres:// 与 postgresql://，并转为 asyncpg 驱动。"""
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://") :]
+    if url.startswith("postgresql://"):
+        return url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    return url
+
+
 engine = create_async_engine(
-    settings.database_url.replace("postgresql://", "postgresql+asyncpg://"),
+    normalize_database_url(settings.database_url),
     echo=False,
     pool_size=10,
     max_overflow=20,
-    pool_recycle=3600,    # 1小时后回收空闲连接，防止连接过期
-    pool_pre_ping=True,   # 使用前检查连接健康，避免使用失效连接
+    pool_recycle=3600,
+    pool_pre_ping=True,
 )
 
-# Session 工厂
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
 class Base(DeclarativeBase):
     """所有 ORM 模型的基类"""
+
     pass
 
 
 async def get_db() -> AsyncSession:
-    """
-    FastAPI 依赖注入：获取数据库 session。
-    注意：不在这里自动 commit，由各 service 函数显式调用 await db.commit()。
-    这与 NestJS 版 PrismaService 的行为一致（每次操作原子性）。
-    """
     async with async_session() as session:
         try:
             yield session

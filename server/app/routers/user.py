@@ -6,6 +6,7 @@ from app.dependencies import get_current_user
 from app.rate_limit import limiter
 from app.schemas.user import UserLogin, UserRegister, UserUpdate, RefreshTokenRequest
 from app.services.user import login_user, register_user, refresh_user_token, upload_avatar, update_user, check_in as check_in_user
+from app.services.dashboard import get_dashboard_stats
 
 router = APIRouter(prefix="/api/v1/user", tags=["user"])
 
@@ -38,8 +39,9 @@ async def login(request: Request, data: UserLogin, db: AsyncSession = Depends(ge
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@limiter.limit("20/minute")
 @router.post("/refresh-token")
-async def refresh(data: RefreshTokenRequest, db: AsyncSession = Depends(get_db)):
+async def refresh(request: Request, data: RefreshTokenRequest, db: AsyncSession = Depends(get_db)):
     """刷新 token。对应 NestJS POST /api/v1/user/refresh-token"""
     try:
         result = await refresh_user_token(db, data.refreshToken)
@@ -77,3 +79,10 @@ async def check_in(user: dict = Depends(get_current_user), db: AsyncSession = De
         return {"data": result, "code": 200, "message": message}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/dashboard")
+async def dashboard(user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """学习数据看板"""
+    data = await get_dashboard_stats(db, user["userId"])
+    return {"data": data, "code": 200, "message": "查询成功"}

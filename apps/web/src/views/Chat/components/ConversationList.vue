@@ -26,7 +26,7 @@
                     class="w-1.5 h-1.5 rounded-full shrink-0 shadow-[0_0_6px_var(--chat-glow)]"
                     style="background: var(--chat-accent)"
                 />
-                <div class="text-[13px] text-gray-700 truncate flex-1">{{ conv.title }}</div>
+                <div class="text-[13px] text-gray-700 line-clamp-2 flex-1 min-w-0 leading-snug" :title="conv.title">{{ conv.title }}</div>
                 <button
                     type="button"
                     class="w-6 h-6 rounded-md bg-red-50 text-red-500 text-xs opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center shrink-0 hover:bg-red-100"

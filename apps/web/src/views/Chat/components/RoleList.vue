@@ -49,8 +49,8 @@ function stripEmoji(label: string) {
     return label.replace(/^[\p{Emoji_Presentation}\p{Emoji}️‍⃣]+\s*/u, '')
 }
 
-const handleClick = (mode: ChatMode) => {
-    chatStore.setRole(mode.role)
+const handleClick = async (mode: ChatMode) => {
+    await chatStore.setRole(mode.role)
     router.replace(`/chat/${mode.role}`)
 }
 

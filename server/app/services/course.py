@@ -9,10 +9,16 @@ from app.models.payment import PaymentRecord, TradeStatus
 async def get_course_list(db: AsyncSession, page: int = 1, page_size: int = 12) -> dict:
     """获取所有课程（分页）。对应 NestJS CourseService.findAll"""
     offset = (page - 1) * page_size
-    result = await db.execute(select(Course).offset(offset).limit(page_size))
+    result = await db.execute(
+        select(Course)
+        .where(Course.is_published.is_(True))
+        .offset(offset)
+        .limit(page_size)
+    )
     courses = result.scalars().all()
-    # 获取总数
-    count_result = await db.execute(select(func.count(Course.id)))
+    count_result = await db.execute(
+        select(func.count(Course.id)).where(Course.is_published.is_(True))
+    )
     total = count_result.scalar()
     return {
         "list": [
@@ -57,3 +63,43 @@ async def get_my_courses(db: AsyncSession, user_id: str) -> list:
             "price": f"{course.price:.2f}",
         })
     return courses
+
+
+async def get_courses_batch_status(
+    db: AsyncSession, user_id: str, course_ids: list[str]
+) -> dict:
+    """批量查询课程信息与当前用户购买状态"""
+    if not course_ids:
+        return {"items": [], "missingIds": []}
+
+    result = await db.execute(select(Course).where(Course.id.in_(course_ids)))
+    courses = {c.id: c for c in result.scalars().all()}
+    found_ids = set(courses.keys())
+    missing_ids = [cid for cid in course_ids if cid not in found_ids]
+
+    if not found_ids:
+        return {"items": [], "missingIds": missing_ids}
+
+    purchased_result = await db.execute(
+        select(CourseRecord.course_id).where(
+            CourseRecord.user_id == user_id,
+            CourseRecord.is_purchased.is_(True),
+            CourseRecord.course_id.in_(found_ids),
+        )
+    )
+    purchased_ids = {row[0] for row in purchased_result.all()}
+
+    items = [
+        {
+            "id": c.id,
+            "name": c.name,
+            "value": c.value,
+            "description": c.description,
+            "teacher": c.teacher,
+            "url": c.url,
+            "price": f"{c.price:.2f}",
+            "purchased": c.id in purchased_ids,
+        }
+        for c in courses.values()
+    ]
+    return {"items": items, "missingIds": missing_ids}

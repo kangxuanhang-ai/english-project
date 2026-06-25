@@ -10,7 +10,7 @@
 
             <!-- AI 推荐卡片 -->
             <div v-if="userStore.getUser" class="mb-8">
-                <RecommendCard />
+                <RecommendCard ref="recommendCardRef" @buy="onRecommendBuy" @learn="onRecommendLearn" />
             </div>
 
             <el-tabs type="card" v-model="currentTab" @tab-change="getList">
@@ -19,7 +19,15 @@
             </el-tabs>
 
             <!-- 课程卡片 3 列 -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div v-if="isLoading" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div v-for="n in 6" :key="n" class="bg-white rounded-2xl border border-zinc-100 p-5 animate-pulse">
+                    <div class="aspect-4/3 bg-zinc-200 rounded-xl mb-4" />
+                    <div class="h-4 bg-zinc-200 rounded w-3/4 mb-2" />
+                    <div class="h-3 bg-zinc-100 rounded w-full mb-4" />
+                    <div class="h-10 bg-zinc-100 rounded-xl" />
+                </div>
+            </div>
+            <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 <article v-for="item in list" :key="item.id"
                     class="group bg-white rounded-2xl overflow-hidden border border-zinc-100 shadow-sm hover:shadow-lg hover:shadow-indigo-500/5 hover:border-indigo-100 transition-all duration-300 flex flex-col">
                     <div class="relative aspect-4/3 bg-zinc-100 overflow-hidden">
@@ -44,9 +52,9 @@
                     </div>
                 </article>
             </div>
-            <el-empty v-if="list.length === 0" description="暂无课程" />
+            <el-empty v-if="!isLoading && list.length === 0" description="暂无课程" />
         </div>
-        <CoursePay v-model="payVisible" :course="selectedCourse" />
+        <CoursePay v-model="payVisible" :course="selectedCourse" @success="onPaySuccess" />
     </div>
 </template>
 <script setup lang="ts">
@@ -61,8 +69,13 @@ import { useUserStore } from '@/stores/user';
 import { useRouter } from 'vue-router';
 import RecommendCard from '@/components/RecommendCard.vue';
 import { ElMessage } from 'element-plus';
+import type { CourseBatchStatus } from '@en/common/course';
+import { useCourseAction } from '@/hooks/useCourseAction';
+import { syncLearningToAi } from '@/utils/learningSync';
 const router = useRouter();
+const { goLearn, toCourse } = useCourseAction();
 const userStore = useUserStore();
+const recommendCardRef = ref<InstanceType<typeof RecommendCard> | null>(null);
 const currentTab = ref('list');
 const { login } = useLogin();
 const list = ref<CourseList>([]);
@@ -74,7 +87,7 @@ const getList = async () => {
         isLoading.value = true;
         if (currentTab.value === 'list') {
             const res = await getCourseList();
-            list.value = res.data.list ?? res.data;
+            list.value = res.data.list;
         } else {
             const res = await getMyCourse();
             list.value = res.data;
@@ -87,18 +100,35 @@ const getList = async () => {
 }
 //打开支付弹框
 const openPay = async (course: Course) => {
-    await login();
+    const ok = await login()
+    if (!ok) return
     if (currentTab.value === 'list') {
-        payVisible.value = true;
-        selectedCourse.value = course;
+        payVisible.value = true
+        selectedCourse.value = course
     } else {
-        router.push(`/courses/learn/${course.id}/${course.name}`);
+        router.push(`/courses/learn/${course.id}/${encodeURIComponent(course.name)}`)
     }
-
 }
 const imageSrc = (url: string) => {
     return url;
 }
+
+const onPaySuccess = async () => {
+    await syncLearningToAi();
+    void recommendCardRef.value?.reload();
+    currentTab.value = 'my';
+    getList();
+}
+
+const onRecommendBuy = (c: CourseBatchStatus) => {
+    selectedCourse.value = toCourse(c);
+    payVisible.value = true;
+}
+
+const onRecommendLearn = (c: CourseBatchStatus) => {
+    goLearn(c);
+}
+
 onMounted(() => {
     getList();
 })

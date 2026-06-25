@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <h1>Tracker埋点SDK</h1>
+    <button>点击</button>
+    <button>
+        <span>ElementPlus</span>
+    </button>
+    <hr>
+    <button onclick="history.pushState({}, '', '/home')">pushState</button>
+    <button onclick="history.replaceState({}, '', '/home')">replaceState</button>
+    <button onclick="window.location.hash = '#/home'">hashchange</button>
+    <button onclick="history.back()">back</button>
+    <button onclick="history.forward()">forward</button>
+    <script src="./index.ts" type="module"></script>
+    <script>
+        // let now = Date.now();
+        // while(Date.now() - now < 2000) {
+        //     //等待2秒
+        // }
+        //创建一个div
+        setTimeout(() => {
+            const div = document.createElement('div');
+            div.style.cssText = 'height: 100px; background: #eee; margin: 10px 0; display: block;';
+            div.textContent = '延迟插入的块，会产生 CLS';
+            document.body.insertBefore(div, document.body.firstChild);
+        }, 500);
+    </script>
+</body>
+</html>

@@ -95,20 +95,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch, nextTick, computed, useTemplateRef } from 'vue';
-import { useRoute } from 'vue-router';
+import { ref, onMounted, watch, nextTick, computed, useTemplateRef } from 'vue'
+import { useRoute } from 'vue-router'
 import type { Word } from '@en/common/word';
 import { useAudio } from '@/hooks/useAudio';
 import { View, Hide, VideoPlay } from '@element-plus/icons-vue';
 import { getWordList, saveWordMaster as saveWordMasterApi } from '@/apis/learn';
 import { ElMessage } from 'element-plus';
+import { syncLearningToAi } from '@/utils/learningSync';
 import { useUserStore } from '@/stores/user';
+import { useTracker } from '@/hooks/useTracker';
 import DOMPurify from 'dompurify';
 
 function sanitize(html: string): string {
     return DOMPurify.sanitize(html);
 }
 const userStore = useUserStore();
+const tracker = useTracker();
 const inputRefs = useTemplateRef<HTMLInputElement[]>('inputRefs');
 interface WordItem {
     word: string;
@@ -158,6 +161,7 @@ const saveWordMaster = async () => {
         currentIndex.value = 0;
         getWordListData();
         userStore.updateUserWordNumber(res.data.wordNumber);
+        void syncLearningToAi();
         ElMessage.success(res.message);
     } else {
         ElMessage.error(res.message);
@@ -222,5 +226,15 @@ const getWordListData = async () => {
 
 onMounted(() => {
     getWordListData();
+    void tracker.trackEvent('course_learn_start', {
+        courseId: route.params.courseId,
+        title: route.params.title,
+    });
+})
+
+watch(() => route.params.courseId, (courseId) => {
+    if (!courseId) return
+    currentIndex.value = 0
+    void getWordListData()
 })
 </script>

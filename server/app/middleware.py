@@ -31,6 +31,10 @@ async def response_envelope_middleware(request: Request, call_next):
     if request.url.path.startswith("/api/v1/pay/notify"):
         return await call_next(request)
 
+    # 跳过 CSV 导出（非 JSON；且 body 读取后不能原样 return response）
+    if request.url.path.startswith("/api/v1/admin/orders/export"):
+        return await call_next(request)
+
     response = await call_next(request)
 
     # 只处理 JSON 响应（2xx 状态码）

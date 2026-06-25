@@ -6,6 +6,7 @@ from io import BytesIO
 import bcrypt
 from nanoid import generate
 from sqlalchemy import update, func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -33,8 +34,16 @@ def user_to_response(user: User, token: dict) -> dict:
         "createdAt": user.created_at.isoformat() if user.created_at else None,
         "updatedAt": user.updated_at.isoformat() if user.updated_at else None,
         "lastLoginAt": user.last_login_at.isoformat() if user.last_login_at else None,
+        "role": user.role,
         "token": token,
     }
+
+
+def _normalize_email(email: str | None) -> str | None:
+    if email is None:
+        return None
+    stripped = email.strip()
+    return stripped if stripped else None
 
 
 async def register_user(db: AsyncSession, data: dict) -> dict:
@@ -48,8 +57,9 @@ async def register_user(db: AsyncSession, data: dict) -> dict:
         raise ValueError("手机号已注册")
 
     # 检查邮箱是否已注册（如果提供了邮箱）
-    if data.get("email"):
-        email_existing = await db.execute(select(User).where(User.email == data["email"]))
+    email = _normalize_email(data.get("email"))
+    if email:
+        email_existing = await db.execute(select(User).where(User.email == email))
         if email_existing.scalar_one_or_none():
             raise ValueError("邮箱已注册")
 
@@ -60,12 +70,21 @@ async def register_user(db: AsyncSession, data: dict) -> dict:
         id=generate(size=20),
         name=data["name"],
         phone=data["phone"],
-        email=data.get("email"),
+        email=email,
         password=hashed,
     )
     db.add(user)
-    await db.flush()  # 获取 ID
-    await db.commit()  # 显式提交（get_db 不自动 commit）
+    try:
+        await db.flush()
+        await db.commit()
+    except IntegrityError as e:
+        await db.rollback()
+        err = str(e.orig) if getattr(e, "orig", None) else str(e)
+        if "user_phone_key" in err or "phone" in err.lower():
+            raise ValueError("手机号已注册") from e
+        if "user_email_key" in err or "email" in err.lower():
+            raise ValueError("邮箱已注册") from e
+        raise ValueError("注册失败，请检查手机号或邮箱是否已被使用") from e
     await db.refresh(user)  # 刷新对象，确保属性可访问
 
     # 生成 token
@@ -186,10 +205,11 @@ async def update_user(db: AsyncSession, user_id: str, data: dict) -> dict:
     # 更新字段（只更新非 None 的字段）
     for key, value in data.items():
         if value is not None:
-            # 转换 camelCase → snake_case
             snake_key = "".join(
                 ["_" + c.lower() if c.isupper() else c for c in key]
             ).lstrip("_")
+            if snake_key == "email":
+                value = _normalize_email(value)
             if hasattr(user, snake_key):
                 setattr(user, snake_key, value)
 

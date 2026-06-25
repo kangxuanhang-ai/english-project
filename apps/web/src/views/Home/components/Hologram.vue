@@ -16,14 +16,19 @@ const hologramRef = useTemplateRef<HTMLCanvasElement>('hologramRef')
 let renderer: any = null
 let controls: any = null
 let scene: any = null
-let animationId: number
+let animationId = 0
+let disposed = false
 
-onUnmounted(() => {
-    if (animationId) cancelAnimationFrame(animationId)
-    if (controls) controls.dispose()
+function disposeScene() {
+    if (animationId) {
+        cancelAnimationFrame(animationId)
+        animationId = 0
+    }
+    controls?.dispose()
+    controls = null
     if (renderer) {
         renderer.dispose()
-        renderer.domElement.remove()
+        renderer = null
     }
     if (scene) {
         scene.traverse((obj: any) => {
@@ -36,23 +41,31 @@ onUnmounted(() => {
                 }
             }
         })
+        scene = null
     }
+}
+
+onUnmounted(() => {
+    disposed = true
+    disposeScene()
 })
 
 onMounted(async () => {
     const THREE = await import('three')
     const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js')
     const { OrbitControls } = await import('three/examples/jsm/controls/OrbitControls.js')
+    if (disposed || !hologramRef.value) return
 
     scene = new THREE.Scene()
-    let mixer: THREE.AnimationMixer | null = null
+    let mixer: InstanceType<typeof THREE.AnimationMixer> | null = null
     const clock = new THREE.Timer()
     const camera = new THREE.PerspectiveCamera(75, 500 / 250, 0.1, 1000)
     camera.position.set(0, 0, 10)
     const loader = new GLTFLoader()
 
     loader.load('/models/hologram/scene.gltf', (gltf: any) => {
-        scene!.add(gltf.scene)
+        if (disposed || !scene) return
+        scene.add(gltf.scene)
         gltf.scene.scale.set(4, 4, 4)
         if(gltf.animations && gltf.animations.length > 0) {
             mixer = new THREE.AnimationMixer(gltf.scene)
@@ -69,7 +82,7 @@ onMounted(async () => {
     scene.add(directionalLight)
 
     renderer = new THREE.WebGLRenderer({
-        canvas: hologramRef.value!,
+        canvas: hologramRef.value,
         antialias: true,
         alpha: true,
         precision: 'highp',
@@ -79,6 +92,7 @@ onMounted(async () => {
     controls = new OrbitControls(camera, renderer.domElement)
 
     const animate = () => {
+        if (disposed) return
         animationId = requestAnimationFrame(animate)
         const delta = clock.getDelta()
         if(mixer) {
