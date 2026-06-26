@@ -39,7 +39,7 @@ def make_tools_by_role(
     web_search_enabled: bool = False,
     web_search_preloaded: bool = False,
 ) -> list:
-    """按角色返回工具列表。仅用户开启联网搜索时挂载 web_search（预搜时不再重复挂载）。"""
+    """按角色返回工具列表。web_search_preloaded=True 表示 Bocha 预搜已成功，不再挂载 web_search 工具。"""
     if role == "normal":
         return make_tools(
             user_id,

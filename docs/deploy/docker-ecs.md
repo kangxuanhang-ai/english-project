@@ -184,6 +184,7 @@ docker compose pull && docker compose up -d
 | `pull` 401 | 检查 `GHCR_PULL_TOKEN` 是否有 read:packages |
 | `/health` 503 | `docker compose logs app`，多为数据库密码与 `DATABASE_URL` 不一致 |
 | 头像/封面裂图 | 确认 `MINIO_PUBLIC_BASE=http://101.37.235.230/minio` |
+| 知识库一直「检索中」/ `Network is unreachable` | `.env` 加 `HF_ENDPOINT=https://hf-mirror.com`，运行 `bash deploy/ecs-hotfix-embedding.sh`，或重建镜像（Dockerfile 已预下载模型） |
 | AI 容器 OOM | 在 `.env` 设 `EMBEDDING_MODE=api`（需 `DEEPSEEK_API_KEY`），然后 `docker compose up -d` |
 | 支付不成功 | 沙箱买家账号、`ALIPAY_NOTIFY_URL` 无端口、安全组 80 开放 |
 

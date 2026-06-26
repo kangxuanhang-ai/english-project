@@ -136,6 +136,19 @@ const list = ref<ChatMessageList>([])
 const message = ref('')
 const deepThink = ref(false)
 const webSearch = ref(false)
+
+/** 与后端 _should_auto_web_search 对齐：天气/新闻等实时问题 */
+const REALTIME_WEB_HINTS = [
+    '天气', '气温', '下雨', '下雪', '预报', '风力',
+    '新闻', '热搜', '最新', '实时', '今天', '明天', '后天',
+    '股价', '汇率', '赛事', '比赛结果',
+]
+
+function shouldAutoWebSearch(text: string): boolean {
+    const t = text.trim()
+    return t.length > 0 && REALTIME_WEB_HINTS.some((h) => t.includes(h))
+}
+
 const chatRef = useTemplateRef<HTMLDivElement>('chatRef')
 const scrollContainerRef = useTemplateRef<HTMLDivElement>('scrollContainerRef')
 const dockRef = ref<InstanceType<typeof ChatInputDock> | null>(null)
@@ -334,8 +347,11 @@ const sendMessage = async () => {
     postToolStreamPhase = 'none'
     let pendingPurchaseBlock: ChatPurchaseBlock | null = null
 
+    const effectiveWebSearch = !isOralMode.value && !deepThink.value
+        && (webSearch.value || shouldAutoWebSearch(msg))
+
     sse<ChatSSEMessage, ChatDto>(CHAT_URL, 'POST',
-        { conversationId: chatStore.activeConversationId!, role: chatStore.activeRole, content: msg, deepThink: isOralMode.value ? false : deepThink.value, webSearch: isOralMode.value ? false : webSearch.value },
+        { conversationId: chatStore.activeConversationId!, role: chatStore.activeRole, content: msg, deepThink: isOralMode.value ? false : deepThink.value, webSearch: effectiveWebSearch },
         (data) => {
             if (!isAlive) return
             const aiMsg = list.value[aiIndex]

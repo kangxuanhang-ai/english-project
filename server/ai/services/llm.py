@@ -83,8 +83,24 @@ def _sanitize_search_text(text: str, max_len: int = 200) -> str:
     return cleaned
 
 
+def _should_auto_web_search(content: str) -> bool:
+    """天气、新闻等实时信息类问题自动走联网（无需用户手动点开关）。"""
+    text = (content or "").strip()
+    if not text:
+        return False
+    hints = (
+        "天气", "气温", "下雨", "下雪", "预报", "风力",
+        "新闻", "热搜", "最新", "实时", "今天", "明天", "后天",
+        "股价", "汇率", "赛事", "比赛结果",
+    )
+    return any(h in text for h in hints)
+
+
 async def create_bocha_search(query: str, count: int = 10) -> str:
     """调用 Bocha 搜索 API（使用共享 HTTP 客户端）"""
+    if not (ai_settings.bocha_api_key or "").strip():
+        logger.warning("Bocha search skipped: BOCHA_API_KEY is not configured")
+        return ""
     try:
         client = get_http_client()
         response = await client.post(
@@ -95,10 +111,18 @@ async def create_bocha_search(query: str, count: int = 10) -> str:
             },
             json={"query": query, "count": count, "summary": True},
         )
+        if response.status_code != 200:
+            logger.error(
+                "Bocha search HTTP %s: %s",
+                response.status_code,
+                response.text[:500],
+            )
+            return ""
         data = response.json()
         values = data.get("data", {}).get("webPages", {}).get("value", [])
 
         if not values:
+            logger.info("Bocha search returned no results for query: %s", query[:80])
             return ""
 
         parts = []

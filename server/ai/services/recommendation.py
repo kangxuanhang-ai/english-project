@@ -29,7 +29,19 @@ def get_default_recommendation() -> dict:
                 "title": "大学英语四级单词",
                 "reason": "CET4 是最基础的英语考试，适合所有学习者起步",
                 "match_score": 1.0,
-            }
+            },
+            {
+                "course_id": None,
+                "title": "大学英语六级单词",
+                "reason": "四级基础扎实后可进阶六级，系统扩展词汇与阅读能力",
+                "match_score": 0.92,
+            },
+            {
+                "course_id": None,
+                "title": "考研单词",
+                "reason": "面向考研备考，覆盖英语一/二高频核心词汇",
+                "match_score": 0.85,
+            },
         ],
         "daily_plan": {
             "new_words_per_day": 20,

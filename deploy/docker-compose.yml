@@ -44,6 +44,7 @@ services:
     env_file: .env
     environment:
       RUN_MIGRATIONS: "1"
+      HF_ENDPOINT: ${HF_ENDPOINT:-https://hf-mirror.com}
     depends_on:
       postgres:
         condition: service_healthy
@@ -70,6 +71,8 @@ services:
     image: ghcr.io/${GHCR_OWNER:-kangxuanhang-ai}/english-project/server:${IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file: .env
+    environment:
+      HF_ENDPOINT: ${HF_ENDPOINT:-https://hf-mirror.com}
     depends_on:
       postgres:
         condition: service_healthy

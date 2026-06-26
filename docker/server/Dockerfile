@@ -18,6 +18,10 @@ RUN uv sync --frozen --no-dev
 
 COPY server/ ./
 
+# 构建阶段预下载 embedding 模型，避免线上容器首次调用 knowledge_search 时访问 HuggingFace 失败
+ENV HF_ENDPOINT=https://hf-mirror.com
+RUN uv run python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-small-zh-v1.5')"
+
 COPY docker/server/entrypoint-app.sh /entrypoint-app.sh
 COPY docker/server/bootstrap.py /app/docker/server/bootstrap.py
 RUN chmod +x /entrypoint-app.sh
