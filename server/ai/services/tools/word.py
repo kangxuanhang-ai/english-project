@@ -25,14 +25,16 @@ async def word_lookup(words: list[str]) -> str:
         for word in cleaned:
             entry = entries.get(word)
             if entry:
-                results.append({
-                    "word": entry.word,
-                    "phonetic": entry.phonetic,
-                    "definition": entry.definition,
-                    "translation": entry.translation,
-                    "pos": entry.pos,
-                    "exchange": entry.exchange,
-                })
+                results.append(
+                    {
+                        "word": entry.word,
+                        "phonetic": entry.phonetic,
+                        "definition": entry.definition,
+                        "translation": entry.translation,
+                        "pos": entry.pos,
+                        "exchange": entry.exchange,
+                    }
+                )
             else:
                 results.append({"error": f"未找到单词 '{word}'"})
 

@@ -76,7 +76,8 @@ async def set_cached_conversation_recommend(
 
 async def load_recommend_from_history(conversation_id: str) -> dict | None:
     """缓存 miss 时从 LangGraph 线程扫描最近一条推荐工具输出。"""
-    from ai.services.chat import get_checkpointer, _extract_recommend_block
+    from ai.services.chat import get_checkpointer
+    from ai.services.chat_blocks import extract_recommend_block
 
     try:
         checkpointer = await get_checkpointer()
@@ -91,7 +92,7 @@ async def load_recommend_from_history(conversation_id: str) -> dict | None:
                 continue
             if getattr(msg, "name", "") != "course_recommendation":
                 continue
-            block = _extract_recommend_block(msg.content or "")
+            block = extract_recommend_block(msg.content or "")
             if block and block.get("courses"):
                 return block
     except Exception as e:

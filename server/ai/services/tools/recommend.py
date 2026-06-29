@@ -14,7 +14,9 @@ def make_course_recommendation(user_id: str, conversation_id: str):
     """返回绑定了 user_id 与 conversation_id 的 course_recommendation 工具"""
 
     @tool
-    async def course_recommendation(count: int = 1, prefer_different: bool = False) -> str:
+    async def course_recommendation(
+        count: int = 1, prefer_different: bool = False
+    ) -> str:
         """根据用户学习数据推荐课程和制定学习计划。
         当用户询问推荐课程、学习计划、下一步学什么、帮我规划学习时使用。
 

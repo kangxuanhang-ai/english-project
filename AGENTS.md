@@ -1,19 +1,20 @@
 # AGENTS.md
 
-English learning platform — pnpm monorepo with Vue 3 frontend, Python FastAPI backend (two apps), client-side tracker library, and shared TypeScript packages. Comments throughout the codebase are in Chinese.
+English learning platform — pnpm monorepo with Vue 3 frontend, React admin dashboard, Python FastAPI backend (two apps), client-side tracker library, and shared TypeScript packages. Comments throughout the codebase are in Chinese.
 
 ## Commands
 
 ### Install Dependencies
 Root pnpm workspace and `server/` Python project are independent:
 ```bash
-pnpm install                # from repo root (web, tracker, common, config)
+pnpm install                # from repo root (web, admin, tracker, common, config)
 cd server && uv sync        # Python backend (uv-managed, Python 3.12+)
 ```
 
 ### Start Development (from repo root)
-- `pnpm all` — All services concurrently (web:8080, server:3000, ai:3001)
-- `pnpm web` — Frontend only
+- `pnpm all` — All services concurrently (web:8080, admin:8081, server:3000, ai:3001)
+- `pnpm web` — Student frontend only
+- `pnpm admin` — Admin dashboard only
 - `pnpm server` — Main API server only
 - `pnpm ai` — AI service only
 
@@ -21,6 +22,10 @@ cd server && uv sync        # Python backend (uv-managed, Python 3.12+)
 - `pnpm dev` — Vite dev server
 - `pnpm build` — vue-tsc type-check + vite build
 - `pnpm type-check` — vue-tsc only
+
+### Admin Dashboard (apps/admin)
+- `pnpm dev` — Vite dev server (port 8081)
+- `pnpm build` — tsc + vite build
 
 ### Backend (from server/)
 Python 3.12+, uv-managed, hatchling build backend. PyPI mirror configured to Tsinghua in `pyproject.toml`.
@@ -40,6 +45,7 @@ Python 3.12+, uv-managed, hatchling build backend. PyPI mirror configured to Tsi
 english/
 ├── apps/
 │   ├── web/          # Vue 3 frontend (@en/web)
+│   ├── admin/        # React admin dashboard (@en/admin)
 │   └── tracker/      # Client SDK (@en/tracker)
 ├── packages/
 │   ├── common/       # Shared TypeScript types (@en/common)
@@ -54,7 +60,7 @@ Root `package.json` defines convenience scripts via `concurrently`. The `server/
 
 **app/** (port 3000): Main REST API. Routers: user, word_book, course, pay, learn, tracker. Socket.IO mounted as ASGI app via `socket_app = socketio.ASGIApp(sio, app)`. JWT auth with access/refresh tokens. Alipay payment (sandbox). Global middleware wraps all 2xx responses into `{timestamp, path, message, code, success, data}` envelope.
 
-**ai/** (port 3001): AI service. Routers: chat, conversation, prompt, recommend. DeepSeek via LangChain with deep-thinking (reasoner) mode. LangGraph `create_react_agent` with PostgresCheckpointer for chat history. Bocha Search API for web grounding. APScheduler for digest jobs. Slowapi for rate limiting. Imports response envelope middleware and exception handlers from `app/middleware.py`. Chat accepts `deepThink` and `webSearch` flags (mutually exclusive — `deepThink` takes priority).
+**ai/** (port 3001): AI service. Routers: chat, conversation, prompt, recommend. DeepSeek via LangChain with deep-thinking (reasoner) mode. LangChain `create_agent` (via `agent_factory`) with `@dynamic_prompt` middleware and PostgresCheckpointer for chat history. Optional LangSmith tracing when `LANGCHAIN_API_KEY` is set. Bocha Search API for web grounding. APScheduler for digest jobs. Slowapi for rate limiting. Imports response envelope middleware and exception handlers from `app/middleware.py`. Chat accepts `deepThink` and `webSearch` flags (mutually exclusive — `deepThink` takes priority).
 
 **shared/**: External service clients — MinIO (file storage), Alipay (payments), Email (SMTP). ClickHouse client exists but is empty (not functional yet).
 
@@ -66,11 +72,14 @@ Root `package.json` defines convenience scripts via `concurrently`. The `server/
 
 **alembic/**: Database migrations. Config in `alembic.ini`. Models imported in `alembic/env.py`.
 
+### Admin Dashboard: @en/admin (apps/admin)
+React 18 admin panel on port 8081. Uses Ant Design 5, React Router DOM 6, TanStack React Query, Zustand for state, Axios for HTTP. Routes: Dashboard, Users, Courses, Orders, Analytics, Knowledge Base. Depends on `@en/common` for types and `@en/config` for port constants. Proxies `/api` to the main server — no separate admin router on the backend.
+
 ### AI Chat Architecture
 
-The AI service uses LangGraph `create_react_agent` with SSE streaming (`agent.astream_events`). The frontend receives events via `@microsoft/fetch-event-source` (not Axios). The response envelope middleware explicitly skips `/ai/v1/chat` paths to preserve the SSE stream.
+The AI service uses LangChain `create_agent` with SSE streaming via `sse_adapter` (`agent.astream_events` mapped to legacy event types). The frontend receives events via `@microsoft/fetch-event-source` (not Axios). The response envelope middleware explicitly skips `/ai/v1/chat` paths to preserve the SSE stream.
 
-**Chat roles**: `normal`, `master`, `business`, `qilinge`, `xiaoman` — each has a distinct system prompt. Only the `normal` role has access to AI tools.
+**Chat roles**: `normal`, `master`, `business`, `qilinge`, `xiaoman`, `oral` — each has a distinct system prompt. Base prompts load from LangSmith Hub (`english-chat-{role}`) via `prompt_loader.py` with 5min cache; `prompt.py` is fallback when Hub is unavailable or `LANGCHAIN_API_KEY` is unset. Only the `normal` role has access to AI tools.
 
 **AI tools** (`ai/services/tools/`): `make_tools(user_id)` creates per-user tool instances:
 - `word_lookup` — look up word definitions
@@ -81,6 +90,8 @@ The AI service uses LangGraph `create_react_agent` with SSE streaming (`agent.as
 
 Other roles get an empty tool list.
 
+**Agent eval (Phase 3)**: Dataset `english-agent-normal-v1` on LangSmith (`LANGCHAIN_EVAL_PROJECT=english-agent-eval`). Scripts: `scripts/create_agent_eval_dataset.py`, `scripts/run_agent_eval.py`. Evaluators: tool accuracy, JSON leak, latency.
+
 **SSE client**: The frontend SSE client (`apps/web/src/apis/sse/index.ts`) calls `ensureValidToken()` before opening a connection (5-second expiry buffer), distinct from the Axios interceptor flow. The `onerror` handler throws to stop `fetchEventSource` from auto-retrying on failures.
 
 ### Configuration
@@ -88,7 +99,7 @@ Both apps use pydantic-settings reading from `server/.env`:
 - `app/config.py` → `Settings` (full config: DB, JWT, MinIO, DeepSeek, Alipay, Email, ClickHouse)
 - `ai/config.py` → `AISettings` (subset: DeepSeek, AI DB, Bocha, Email)
 
-Port constants for dev servers are in `packages/config/index.ts` and used by Vite proxy config and root scripts.
+Port constants for dev servers are in `packages/config/index.ts` (3000, 3001, 8080, 8081) and used by Vite proxy config and root scripts.
 
 ### Frontend: Vue 3
 Routes: Home, WordBook, Setting, Chat, Course. Views are in `src/views/` (not `src/pages/`). State via Pinia with localStorage persistence. API layer in `src/apis/`. Tailwind CSS 4 + Element Plus (Chinese locale `zh-cn`).
@@ -99,7 +110,7 @@ Routes: Home, WordBook, Setting, Chat, Course. Views are in `src/views/` (not `s
 
 **JWT token refresh flow**: The Axios response interceptor in `src/apis/index.ts` handles 401s by refreshing the access token via a refresh token. Concurrent 401s are queued (`requestQueue`) while a single refresh is in flight — once the new token arrives, all queued requests retry with it. On refresh failure, the user is logged out and redirected to `/`. Access tokens expire in 15 minutes; the SSE client proactively refreshes ~5 seconds before expiry.
 
-**Frontend hooks** (`src/hooks/`): `useAudio`, `useAvatar`, `useLogin`, `useSocket`, `useVoiceToText` (Web Speech API).
+**Frontend hooks** (`src/hooks/`): `useAudio`, `useAvatar`, `useLogin`, `useSocket`, `useVoiceToText` (Web Speech API), `useTTS`, `useTracker`, `useCourseAction`, `useDashboardExport`.
 
 **3D/animation**: Three.js models in `components/Login/ModelViewer.vue` and `views/Home/components/Hologram.vue`. GSAP for animations. DOMPurify + marked for markdown rendering in chat.
 
@@ -108,7 +119,7 @@ Client SDK reporting UV (FingerprintJS), PV, events, JS errors, Web Vitals. Expo
 
 ### Shared Packages
 - `packages/common` (`@en/common`): Pure TypeScript type definitions, no runtime deps
-- `packages/config` (`@en/config`): Port constants (3000, 3001, 8080)
+- `packages/config` (`@en/config`): Port constants (3000, 3001, 8080, 8081)
 
 ## Database
 
@@ -120,41 +131,9 @@ Alembic manages migrations in `server/alembic/`. Models defined in `server/app/m
 
 **Windows note**: The AI service (`ai/main.py`) sets `WindowsSelectorEventLoopPolicy` at startup, required for `psycopg` on Windows.
 
-## Production Deployment
+## CI/CD
 
-1. **Environment**
-   - Copy `server/.env.example` → `server/.env` and `apps/web/.env.example` → `apps/web/.env.production`
-   - Set a strong `SECRET_KEY` (not the example default)
-   - Configure `ALIPAY_NOTIFY_URL` to a public HTTPS URL reachable by Alipay
-   - Optional: `REDIS_URL`, `RATE_LIMIT_STORAGE_URI` for multi-worker rate limits / recommend cache
-
-2. **Database**
-   ```bash
-   cd server && uv sync
-   uv run alembic upgrade head
-   uv run python seed.py
-   ```
-   Word book seed uses `server/data/ecdict.sample.csv` by default; set `ECDICT_CSV_PATH` for full ECDICT.
-
-3. **Build frontend**
-   ```bash
-   pnpm install
-   pnpm --filter @en/web build
-   ```
-   Deploy `apps/web/dist/` behind Nginx (or CDN).
-
-4. **Run backends** (two processes, same `server/.env`):
-   ```bash
-   uv run python -m uvicorn app.main:socket_app --host 0.0.0.0 --port 3000
-   uv run python -m uvicorn ai.main:ai_app --host 0.0.0.0 --port 3001
-   ```
-   Use `socket_app` for the main API (Socket.IO mounted). Do not use plain `app` in production if payments rely on WebSocket notify.
-
-5. **Nginx** — see `docs/deploy/nginx.example.conf`: proxy `/api` → 3000, `/ai` → 3001 with SSE buffering off, `/socket.io` → 3000, SPA `try_files`.
-
-6. **Health** — `GET /health` on the main API (port 3000) returns DB status; use for load balancer probes.
-
-7. **QA** — run checklist in `docs/qa/2026-06-25-launch-readiness-qa.md` before go-live.
+GitHub Actions workflow (`.github/workflows/deploy.yml`) builds Docker images for server and nginx, pushes to GHCR, then deploys via SSH to ECS. Deploys on push to `main` or manual trigger. Uses `deploy/docker-compose.yml` with postgres, minio, app (port 3000), ai (port 3001), and nginx (port 80). The server image is shared by `app` and `ai` containers — entrypoint scripts differ. Nginx image builds both student and admin frontends.
 
 ## Testing
 
@@ -164,11 +143,11 @@ No test infrastructure is configured. The `vitest`, `jest`, `playwright`, and `p
 
 **Python server**: No linter/formatter configured. Follow standard Python conventions. Comments are in Chinese.
 
-**Frontend**: No ESLint/Prettier configured for the Vue app.
+**Frontend**: No ESLint/Prettier configured for the Vue or admin apps.
 
 ## Environment
 
-Server requires `.env` at `server/.env` with: DATABASE_URL, SECRET_KEY, MINIO_*, DEEPSEEK_API_KEY/MODEL, AI_DATABASE_URL, BOCHA_SEARCH_URL/API_KEY, ALIPAY_*, EMAIL_*, CLICKHOUSE_*. Frontend uses `.env.development` / `.env.production` with VITE_MINIO_ENDPOINT and VITE_SOCKET_URL.
+Server requires `.env` at `server/.env` with: DATABASE_URL, SECRET_KEY, MINIO_*, DEEPSEEK_API_KEY/MODEL, AI_DATABASE_URL, BOCHA_SEARCH_URL/API_KEY, ALIPAY_*, EMAIL_*, CLICKHOUSE_*. Frontend uses `.env.development` / `.env.production` with VITE_MINIO_ENDPOINT and VITE_SOCKET_URL. Admin uses `VITE_BASE` for its base path (defaults to `/`).
 
 ## Known Issues
 

@@ -27,6 +27,11 @@ class AISettings(BaseSettings):
     embedding_dimensions: int = Field(default=1536, alias="EMBEDDING_DIMENSIONS")
     knowledge_min_score: float = Field(default=0.5, alias="KNOWLEDGE_MIN_SCORE")
 
+    langchain_api_key: str = Field(default="", alias="LANGCHAIN_API_KEY")
+    langchain_project: str = Field(default="english-chat", alias="LANGCHAIN_PROJECT")
+    langchain_eval_project: str = Field(default="english-agent-eval", alias="LANGCHAIN_EVAL_PROJECT")
+    agent_eval_user_id: str = Field(default="eval-user", alias="AGENT_EVAL_USER_ID")
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 

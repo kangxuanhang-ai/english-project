@@ -11,23 +11,22 @@ base_tools = [word_lookup, web_search]
 
 
 def make_tools(
-    user_id: str, conversation_id: str, *, include_web_search: bool = False
+    user_id: str, conversation_id: str, *, include_web_search: bool = False, web_mode: bool = False
 ) -> list:
-    """创建绑定用户 ID 与对话 ID 的工具列表（normal 角色）"""
+    """创建绑定用户 ID 与对话 ID 的工具列表（normal 角色）。
+
+    web_mode=True（自动/手动联网）：不挂载 knowledge_search，避免天气等实时问题误走知识库。
+    """
     progress_query = make_progress_query(user_id)
     course_recommendation = make_course_recommendation(user_id, conversation_id)
     course_purchase = make_course_purchase(user_id, conversation_id)
     grammar_check = make_grammar_check(user_id)
-    tools = [
-        word_lookup,
-        knowledge_search,
-        grammar_check,
-        progress_query,
-        course_recommendation,
-        course_purchase,
-    ]
+    tools = [word_lookup]
+    if not web_mode:
+        tools.append(knowledge_search)
+    tools.extend([grammar_check, progress_query, course_recommendation, course_purchase])
     if include_web_search:
-        tools.insert(2, web_search)
+        tools.insert(1 if web_mode else 2, web_search)
     return tools
 
 
@@ -45,6 +44,7 @@ def make_tools_by_role(
             user_id,
             conversation_id,
             include_web_search=web_search_enabled and not web_search_preloaded,
+            web_mode=web_search_enabled,
         )
     if role == "oral":
         return [make_grammar_check(user_id)]

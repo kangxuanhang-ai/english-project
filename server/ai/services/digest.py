@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import select
-from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_agent
 from markdown2 import markdown
 
 from app.database import async_session
@@ -27,7 +27,14 @@ async def handle_email_digest():
 
     # 在循环外创建 LLM 实例（避免重复创建 HTTP 连接）
     model = get_llm()
-    agent = create_react_agent(model=model, tools=[])
+    agent = create_agent(
+        model=model,
+        tools=[],
+        system_prompt=(
+            "你是英语学习平台的报告助手。"
+            "根据用户今日学习数据，生成简短、友好的中文单词记忆报告，使用 Markdown 格式。"
+        ),
+    )
 
     async with async_session() as db:
         # 筛选高质量用户

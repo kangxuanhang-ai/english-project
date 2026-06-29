@@ -69,9 +69,9 @@ The root `package.json` defines convenience scripts (`pnpm all`, `pnpm server`, 
 ### Backend: Two FastAPI Apps
 `server/` contains two FastAPI applications sharing a common `shared/` directory:
 
-**app/** (port 3000): Main REST API. Routers: user, word_book, course, pay, learn, tracker. Socket.IO mounted as ASGI app via `socket_app = socketio.ASGIApp(sio, app)`. JWT auth with access/refresh tokens. Alipay payment (sandbox). Global middleware wraps all 2xx responses into `{timestamp, path, message, code, success, data}` envelope.
+**app/** (port 3000): Main REST API. Routers: user, word_book, course, pay, learn, tracker, admin. Socket.IO mounted as ASGI app via `socket_app = socketio.ASGIApp(sio, app)`. JWT auth with access/refresh tokens. Alipay payment (sandbox). Global middleware wraps all 2xx responses into `{timestamp, path, message, code, success, data}` envelope.
 
-**ai/** (port 3001): AI service. Routers: chat, conversation, prompt, recommend. DeepSeek via LangChain with deep-thinking (reasoner) mode. LangGraph `create_react_agent` with PostgresCheckpointer for chat history. Bocha Search API for web grounding. APScheduler for digest jobs. Slowapi for rate limiting. Imports response envelope middleware and exception handlers from `app/middleware.py`. Chat accepts `deepThink` and `webSearch` flags (mutually exclusive — `deepThink` takes priority).
+**ai/** (port 3001): AI service. Routers: chat, conversation, prompt, recommend. DeepSeek via LangChain with deep-thinking (reasoner) mode. LangChain `create_agent` (via `agent_factory`) with `@dynamic_prompt` middleware and PostgresCheckpointer for chat history. Optional LangSmith tracing when `LANGCHAIN_API_KEY` is set. Bocha Search API for web grounding. APScheduler for digest jobs. Slowapi for rate limiting. Imports response envelope middleware and exception handlers from `app/middleware.py`. Chat accepts `deepThink` and `webSearch` flags (mutually exclusive — `deepThink` takes priority).
 
 **shared/**: External service clients — MinIO (file storage), Alipay (payments), Email (SMTP). ClickHouse client exists but is empty (not functional yet).
 
@@ -85,9 +85,9 @@ The root `package.json` defines convenience scripts (`pnpm all`, `pnpm server`, 
 
 ### AI Chat Architecture
 
-The AI service uses LangGraph `create_react_agent` with SSE streaming (`agent.astream_events`). The frontend receives events via `@microsoft/fetch-event-source` (not Axios). The response envelope middleware explicitly skips `/ai/v1/chat` paths to preserve the SSE stream.
+The AI service uses LangChain `create_agent` with SSE streaming via `sse_adapter` (`agent.astream_events` mapped to legacy event types). The frontend receives events via `@microsoft/fetch-event-source` (not Axios). The response envelope middleware explicitly skips `/ai/v1/chat` paths to preserve the SSE stream.
 
-**Chat roles**: `normal`, `master`, `business`, `qilinge`, `xiaoman` — each has a distinct system prompt. Only the `normal` role has access to AI tools.
+**Chat roles**: `normal`, `master`, `business`, `qilinge`, `xiaoman`, `oral` — each has a distinct system prompt. Base prompts load from LangSmith Hub (`english-chat-{role}`) via `prompt_loader.py` with 5min cache; `prompt.py` is fallback when Hub is unavailable or `LANGCHAIN_API_KEY` is unset. Only the `normal` role has access to AI tools.
 
 **AI tools** (`ai/services/tools/`): `make_tools(user_id)` creates per-user tool instances:
 - `word_lookup` — look up word definitions
@@ -97,6 +97,8 @@ The AI service uses LangGraph `create_react_agent` with SSE streaming (`agent.as
 - `recommend` — course recommendations
 
 Other roles get an empty tool list.
+
+**Agent eval (Phase 3)**: Dataset `english-agent-normal-v1` on LangSmith (`LANGCHAIN_EVAL_PROJECT=english-agent-eval`). Scripts: `scripts/create_agent_eval_dataset.py`, `scripts/run_agent_eval.py`. Evaluators: tool accuracy, JSON leak, latency.
 
 **SSE token refresh**: The frontend SSE client (`apps/web/src/apis/sse/index.ts`) proactively checks JWT expiry 5 seconds before it expires and refreshes the token mid-stream, distinct from the Axios interceptor flow. The `onerror` handler throws to stop `fetchEventSource` from auto-retrying on failures.
 
@@ -116,7 +118,7 @@ Routes: Home, WordBook, Setting, Chat, Course. Views are in `src/views/` (not `s
 
 **JWT token refresh flow**: The Axios response interceptor in `src/apis/index.ts` handles 401s by refreshing the access token via a refresh token. Concurrent 401s are queued (`requestQueue`) while a single refresh is in flight — once the new token arrives, all queued requests retry with it. On refresh failure, the user is logged out and redirected to `/`. Access tokens expire in 15 minutes; the SSE client proactively refreshes ~5 seconds before expiry.
 
-**Frontend hooks** (`src/hooks/`): `useAudio`, `useAvatar`, `useLogin`, `useSocket`, `useVoiceToText` (Web Speech API).
+**Frontend hooks** (`src/hooks/`): `useAudio`, `useAvatar`, `useLogin`, `useSocket`, `useVoiceToText` (Web Speech API), `useTTS`, `useTracker`, `useCourseAction`, `useDashboardExport`.
 
 **3D/animation**: Three.js models in `Login/ModelViewer.vue` and `Home/components/Hologram.vue`. GSAP for animations. DOMPurify + marked for markdown rendering in chat.
 

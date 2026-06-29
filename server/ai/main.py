@@ -16,6 +16,7 @@ if sys.platform == "win32":
 
 from ai.routers import prompt, chat, conversation, recommend
 from ai.services.digest import start_scheduler
+from ai.services.tracing import configure_langsmith_tracing
 from app.config import settings
 from app.middleware import response_envelope_middleware, exception_handler
 
@@ -27,6 +28,7 @@ async def lifespan(app: FastAPI):
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
+    configure_langsmith_tracing()
     start_scheduler()
     yield
     from ai.services.chat import reset_checkpointer

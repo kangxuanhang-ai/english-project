@@ -97,3 +97,11 @@ def get_prompt_list() -> list:
 def get_prompt_by_role(role: str) -> dict | None:
     """根据 role 获取完整的 prompt 对象"""
     return next((m for m in CHAT_MODES if m["role"] == role), None)
+
+
+def get_local_role_prompt(role: str) -> str:
+    """本地 fallback：返回角色的 system prompt 正文。"""
+    obj = get_prompt_by_role(role)
+    if not obj:
+        raise ValueError(f"unknown role: {role}")
+    return obj["prompt"]

@@ -106,9 +106,9 @@ LangChain 1.x 官方推荐改用 `langchain.agents.create_agent`，配合 `agent
 stream_chat(data)
   ├── 组装 ChatContext（role, user_id, conversation_id, base_prompt, extras）
   ├── agent_factory.build_agent(model, tools, checkpointer, middleware)
-  ├── agent.astream(..., stream_mode=["messages","updates"], version="v2", context=ctx)
-  ├── sse_adapter.map_chunks_to_legacy_sse() → yield 现有 JSON 事件
-  └── LangSmith 自动 trace（环境变量）
+  ├── agent.astream_events(..., version="v2", context=ctx)   # Phase 1 主路径（行为等价）
+  ├── sse_adapter.map_events_to_legacy_sse() → yield 现有 JSON 事件
+  └── LangSmith auto-trace（仅 LANGCHAIN_API_KEY 已配置时）
 ```
 
 #### 4.1.2 新增模块
@@ -128,16 +128,26 @@ stream_chat(data)
 
 **`server/ai/services/sse_adapter.py`**
 
-- 输入：`agent.astream` 的 async chunk 迭代器
+- 输入：`agent.astream_events` 的 async event 迭代器（Phase 1 主路径，与现网事件名一致）
 - 输出：与现网一致的 SSE 字符串（`data: {...}\n\n`）
-- 映射规则：
-  - `messages` 类型 + `AIMessageChunk` → `reasoning`（若有 `reasoning_content`）或 `chat`
-  - `updates` 类型 + tools 步骤 → `tool` / `tool_result`
-  - 保留 `chat.py` 中 `_extract_recommend_block`、`_extract_grammar_block`、`_extract_purchase_block` 逻辑（可 import 或迁入 adapter）
+- 映射规则（与现 `chat.py` 等价，整段迁入而非重写）：
+  - `on_tool_start` → `type: tool`
+  - `on_tool_end` → `type: tool_result`（含 recommend/grammar/purchase block 解析）
+  - `on_chat_model_stream` → `reasoning` 或 `chat`
   - 流结束 → `done`；异常 → `error`
 - 继续配合 `_ChatContentFilter` 做 recommend JSON 泄漏过滤
 
-**Fallback**：若联调中 `updates` 无法稳定映射 tool 的 `run_id`，Phase 1 可临时对该路径使用 `astream_events`（仅 adapter 内部切换，不暴露双栈给业务层）。
+**Phase 1 流式实现（审查后修订 — 优先保功能）**：
+
+经本地验证（`create_agent` + `AsyncPostgresSaver` + 工具调用）：
+
+- `create_agent` 生成的 graph **仍支持** `astream_events(..., version="v2")`，事件名与现网一致：`on_tool_start` / `on_tool_end` / `on_chat_model_stream`
+- 同一 `thread_id` 上，`create_react_agent` 写入的历史可被 `create_agent` **继续追加**（messages 通道兼容，实测 2→4 条消息正常）
+- `agent.stream(stream_mode=["messages","updates"])` 的 `updates` chunk **稀疏**，tool 事件时序与 `astream_events` 不同，**不适合**作为 Phase 1 主路径
+
+因此 Phase 1 的 `sse_adapter` **主路径改为包装现有 `astream_events` 逻辑**（从 `chat.py` 迁入，行为等价），而非重写为 `agent.stream` 映射。LangChain 新 API 的收益在 `create_agent` + middleware；streaming 迁移推迟到 Phase 1 稳定后再评估。
+
+**Fallback**：若 `astream_events` 在未来版本移除，再实现 `agent.stream` → legacy SSE 映射层。
 
 #### 4.1.3 修改模块
 
@@ -155,12 +165,14 @@ stream_chat(data)
 **`server/.env.example`**
 
 ```env
-# LangSmith（Phase 1 起）
-LANGCHAIN_TRACING_V2=true
+# LangSmith（Phase 1 起；仅当 LANGCHAIN_API_KEY 非空时启用 tracing）
+# LANGCHAIN_TRACING_V2=true
 LANGCHAIN_API_KEY=
 LANGCHAIN_PROJECT=english-chat
 # LANGCHAIN_ENDPOINT=https://api.smith.langchain.com
 ```
+
+应用启动或 `stream_chat` 入口处：**仅当 `LANGCHAIN_API_KEY` 已配置时才设置 `LANGCHAIN_TRACING_V2=true`**，否则不开启 tracing。
 
 **文档**：更新 `AGENTS.md` / `CLAUDE.md` 中 agent 架构描述。
 
@@ -176,12 +188,34 @@ Tracing 失败不得阻断聊天（best-effort）。
 
 #### 4.1.5 Phase 1 验收标准
 
+**聊天主路径（必须全部通过）**
+
 - [ ] 6 角色：查词、语法、推荐、购课、联网、知识库场景正常
 - [ ] SSE 事件类型与字段与升级前一致（对照 `ChatArea.vue`）
-- [ ] LangSmith `english-chat` 可见 root run 与 tool 子 run
-- [ ] digest 定时任务仍可生成报告
-- [ ] checkpointer 断连 retry、poisoned thread 清理仍有效
+- [ ] 工具事件顺序：`tool` → `tool_result` → 后续 `chat`（`postToolStreamPhase` 依赖此顺序）
+- [ ] `recommendBlock` / `grammarBlock` / `purchaseBlock` 解析与购课弹窗（`ConfirmPurchaseDialog`）正常
 - [ ] DeepSeek reasoner 模式 `reasoning` 事件仍正常
+- [ ] 自动联网（`_should_auto_web_search`）与 Bocha 预注入路径正常
+- [ ] `oral` 角色仅 `grammar_check` 工具可用
+
+**历史与状态（审查补充 — 易遗漏）**
+
+- [ ] **旧对话兼容**：升级前已有 thread 的对话，`GET /ai/v1/chat/history` 仍能展示（含 recommend/grammar 卡片折叠）
+- [ ] 同一会话多轮：第二轮起 agent 能读到上一轮上下文
+- [ ] 删除对话：`adelete_thread` + PG `conversation` 记录删除仍正常
+- [ ] poisoned thread（`tool_calls` ValueError）自动 `adelete_thread` + 重试仍有效
+- [ ] checkpointer 断连 OperationalError retry 仍有效
+
+**其它服务**
+
+- [ ] digest 定时任务仍可生成报告（无 checkpointer 的 `ainvoke`）
+- [ ] `generate_title` 不受影响（直连 LLM，不经 agent）
+- [ ] `ai/routers/recommend.py` 独立推荐 API 不受影响
+
+**LangSmith（best-effort，失败不阻断聊天）**
+
+- [ ] 配置 `LANGCHAIN_API_KEY` 时，`english-chat` 可见 root run 与 tool 子 run
+- [ ] **未配置 API key 时不启用 tracing**（避免启动/请求异常）
 
 ---
 
@@ -191,14 +225,18 @@ Tracing 失败不得阻断聊天（best-effort）。
 
 #### 4.2.1 Prompt 命名
 
+Hub 标识符（LangSmith 将 `/` 解析为租户分隔符，故不用 `english/chat-*`）：
+
 ```
-english/chat-normal
-english/chat-master
-english/chat-business
-english/chat-qilinge
-english/chat-xiaoman
-english/chat-oral
+english-chat-normal
+english-chat-master
+english-chat-business
+english-chat-qilinge
+english-chat-xiaoman
+english-chat-oral
 ```
+
+（设计初稿 `english/chat-{role}` 与此等价，仅命名格式不同。）
 
 #### 4.2.2 加载策略
 
@@ -207,7 +245,7 @@ english/chat-oral
 ```python
 async def get_role_base_prompt(role: str) -> str:
     try:
-        return await pull_from_langsmith(f"english/chat-{role}")  # 内存缓存 TTL 5min
+        return await pull_from_langsmith(f"english-chat-{role}")  # 内存缓存 TTL 5min
     except Exception:
         logger.warning("LangSmith prompt fallback for role=%s", role)
         return get_local_prompt(role)  # prompt.py
@@ -299,11 +337,14 @@ sequenceDiagram
 
 | 风险 | 影响 | 缓解 |
 |------|------|------|
-| `agent.stream` 与 DeepSeek `reasoning_content` 字段不兼容 | reasoner 模式无思考流 | adapter 单独处理 `AIMessageChunk.additional_kwargs` |
-| `updates` 中 tool 事件缺少稳定 id | 前端 tool 卡片错位 | adapter 用 message id 映射；fallback 至 `astream_events` |
-| LangSmith API 不可用 | tracing / prompt 失败 | tracing best-effort；prompt fallback 本地 |
-| checkpointer 兼容性 | 历史对话丢失 | 沿用同一 `AsyncPostgresSaver`，不迁移 schema |
-| normal 角色 agent 无法缓存 | 首 token 略慢 | Phase 1 不优化；后续可考虑 middleware 层缓存 base agent |
+| `agent.stream` 与 DeepSeek `reasoning_content` 字段不兼容 | reasoner 模式无思考流 | Phase 1 主用 `astream_events`；reasoning 逻辑原样保留 |
+| `updates` 中 tool 事件时序/ID 不稳定 | 前端 tool 卡片错位 | Phase 1 不采用 `agent.stream` 主路径（已实测验证） |
+| LangSmith API 不可用或未配置 key | tracing 失败影响聊天 | 仅 key 存在时启用 tracing；失败不阻断 |
+| checkpointer 兼容性 | 历史对话丢失 | 已实测 react→create_agent 同 thread 可追加；不迁移 schema |
+| `@dynamic_prompt` 未传入 context | normal 角色丢失联网/进度注入 | 每次 `astream` 必须传 `context=ChatContext(...)` |
+| `_coerce_tool_output_text` 对新 ToolMessage 格式 | tool_result 乱码 | 保留并测试 content / content_blocks 双路径 |
+| normal 角色 agent 无法缓存 | 首 token 略慢 | Phase 1 不优化；禁止缓存 normal |
+| Agent 实例缓存 + 动态 prompt（非 normal） | 旧实现已安全（静态 prompt） | middleware 从 context 读 base_prompt，缓存 agent 图结构即可 |
 
 ---
 
@@ -334,6 +375,54 @@ sequenceDiagram
 
 ## 9. 下一步
 
-1. 用户 review 本 spec
+1. 用户 review 本 spec（含第 10 节审查修订）
 2. 批准后 invoke `writing-plans` skill 生成 Phase 1 实现计划
 3. Phase 1 完成并验收后再启动 Phase 2 / 3
+
+---
+
+## 10. 审查修订记录（2026-06-29）
+
+对用户「不能损坏现有功能」要求的专项审查结论。
+
+### 10.1 本地验证结果（已通过）
+
+| 验证项 | 结果 |
+|--------|------|
+| `create_agent` + `AsyncPostgresSaver` | OK |
+| `create_agent` + `astream_events` 工具事件 | `on_tool_start` / `on_tool_end` 正常 |
+| `create_react_agent` thread → `create_agent` 续聊 | messages 2→4，类型 human/ai 正常 |
+| `@dynamic_prompt` + `context=` | OK |
+
+### 10.2 原 spec 遗漏项（已补入 4.1.5）
+
+1. **旧对话历史**：`get_chat_history` + `_fold_messages_for_history` 未列入验收
+2. **购课弹窗链路**：`purchaseBlock` → `ConfirmPurchaseDialog` 未列入验收
+3. **工具事件顺序**：前端 `postToolStreamPhase` 依赖 `tool` 先于 `tool_result`
+4. **`generate_title` / recommend API**：明确为不在范围内、不应被改坏
+5. **LangSmith 未配置 key**：不应默认 `TRACING_V2=true`
+
+### 10.3 原方案 2 风险点（已修订）
+
+原 spec 计划 Phase 1 主用 `agent.stream(messages/updates)` 重写 SSE 映射——**风险偏高**：
+
+- `updates` chunk 在简单对话中仅 1 次，tool 场景时序与 `astream_events` 不同
+- 前端依赖细粒度事件顺序与 `_coerce_tool_output_text` 等既有逻辑
+
+**修订**：Phase 1 的 `sse_adapter` 包装 **`astream_events`（行为等价迁移）** + **`create_agent` + middleware**。仍算方案 2 的模块拆分（factory / adapter / middleware），但 streaming 不重写。
+
+### 10.4 Phase 1 实施防护栏
+
+1. **不改** `apps/web` Chat 组件
+2. **不改** checkpointer 表结构 / `thread_id` 语义
+3. **保留** `chat.py` 全部 JSON 过滤与 block 提取函数（迁入 adapter 时整段搬运，不重写）
+4. **保留** retry / poisoned thread / stream interrupted 逻辑
+5. **新增** `server/scripts/smoke_chat_agent.py`（Phase 1 实现计划内）：覆盖 history、tool、reasoner 冒烟
+6. **LangSmith tracing 可选**：无 key 时零影响
+
+### 10.5 不在 Phase 1 范围（避免 scope creep）
+
+- Prompt Hub（Phase 2）
+- Eval dataset（Phase 3）
+- 前端 SSE 协议变更
+- 依赖 major 升级
