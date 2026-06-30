@@ -17,14 +17,19 @@ def main() -> None:
         stream=sys.stderr,
     )
 
+    import uvicorn
+
     from english_mcp.config import mcp_settings
+    from english_mcp.middleware import McpApiKeyMiddleware
     from english_mcp.server import mcp
 
     logger = logging.getLogger(__name__)
     host = mcp_settings.mcp_http_host
     port = mcp_settings.mcp_http_port
+    inner = mcp.streamable_http_app()
+    app = McpApiKeyMiddleware(inner)
     logger.info("Starting english_mcp HTTP on %s:%s/mcp", host, port)
-    mcp.run(transport="streamable-http")
+    uvicorn.run(app, host=host, port=port)
 
 
 if __name__ == "__main__":

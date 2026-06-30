@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from typing import Union
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 from english_mcp.config import mcp_settings
 from english_mcp import db as mcp_db
@@ -40,11 +41,23 @@ async def lifespan(_server: FastMCP) -> AsyncIterator[None]:
         logger.info("english_mcp DB pool disposed")
 
 
+def _transport_security() -> TransportSecuritySettings | None:
+    if mcp_settings.mcp_http_host in ("0.0.0.0", "::"):
+        return TransportSecuritySettings(
+            enable_dns_rebinding_protection=True,
+            allowed_hosts=["*"],
+            allowed_origins=["*"],
+        )
+    return None
+
+
 mcp = FastMCP(
     "english",
     lifespan=lifespan,
     host=mcp_settings.mcp_http_host,
     port=mcp_settings.mcp_http_port,
+    stateless_http=True,
+    transport_security=_transport_security(),
 )
 
 

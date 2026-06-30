@@ -11,7 +11,9 @@ from app.services.word_lookup import lookup_words as lookup_words_service
 from english_mcp import db as mcp_db
 from english_mcp.auth import rate_limit_key, resolve_progress_user_id
 from english_mcp.config import mcp_settings
+from english_mcp.context import get_mcp_user
 from english_mcp.rate_limit import allow_grammar
+from english_mcp.runtime import is_http_mode
 
 
 def _require_session():
@@ -35,8 +37,11 @@ async def run_lookup_words(words: Union[list[str], str]) -> str:
 
 
 async def run_check_grammar(text: str) -> str:
+    if is_http_mode() and mcp_settings.mcp_grammar_require_key and not get_mcp_user():
+        return "语法检查需要 ENGLISH-MCP-API-KEY，请在平台设置页生成"
     key = rate_limit_key()
-    if not allow_grammar(key):
+    anonymous = is_http_mode() and not get_mcp_user()
+    if not allow_grammar(key, anonymous=anonymous):
         return "语法检查请求过于频繁，请稍后再试。"
     return await check_grammar(text)
 
