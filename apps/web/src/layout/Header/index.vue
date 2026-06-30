@@ -35,7 +35,7 @@
 
 
 <script setup lang="ts">
-import { Sunny, Star, HomeFilled, Notebook, MagicStick, Reading, Setting } from '@element-plus/icons-vue'
+import { Sunny, Star, HomeFilled, Notebook, MagicStick, Reading, Setting, Collection } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router';
 import { watch, ref } from 'vue'
 import { useUserStore } from '@/stores/user';
@@ -51,6 +51,7 @@ const routes = [
     { path: '/', name: '主页', icon: HomeFilled, isAuth: false },  //不需要登录
     { path: '/chat', name: '聊天', icon: MagicStick, isAuth: true },  //需要登录
     { path: '/word-book/index', name: '词库', icon: Notebook, isAuth: false },  //不需要登录
+    { path: '/my-words', name: '生词本', icon: Collection, isAuth: true },  //需要登录
     { path: '/courses/index', name: '课程', icon: Reading, isAuth: false },  //不需要登录
     { path: '/setting/index', name: '设置', icon: Setting, isAuth: true },  //需要登录
 ]

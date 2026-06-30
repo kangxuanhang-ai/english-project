@@ -15,7 +15,7 @@ from app.config import settings
 from app.database import async_session
 from app.middleware import response_envelope_middleware, exception_handler
 from app.rate_limit import limiter
-from app.routers import user, word_book, course, pay, learn, tracker
+from app.routers import user, word_book, course, pay, learn, tracker, my_words
 from app.routers.admin import router as admin_router
 from app.services.socket import sio
 from shared.minio_client import minio_client
@@ -61,6 +61,7 @@ app.include_router(word_book.router)
 app.include_router(course.router)
 app.include_router(pay.router)
 app.include_router(learn.router)
+app.include_router(my_words.router)
 app.include_router(tracker.router)
 app.include_router(admin_router)
 

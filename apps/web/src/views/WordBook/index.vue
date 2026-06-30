@@ -29,9 +29,9 @@
             </div>
         </div>
         <div v-else class="grid grid-cols-3 gap-2">
-            <div class="bg-white hover:bg-blue-50 border border-blue-200 text-gray-800 rounded-[10px] p-4 cursor-pointer transition-all duration-200 shadow-sm hover:shadow-md h-[220px]"
+            <div class="bg-white hover:bg-blue-50 border border-blue-200 text-gray-800 rounded-[10px] p-4 transition-all duration-200 shadow-sm hover:shadow-md h-[220px] flex flex-col"
                 v-for="item in list" :key="item.id">
-                <div class="">
+                <div class="flex-1">
                     <div class="text-sm font-semibold text-blue-600 mb-1">{{ item.word }}</div>
                     <div class="text-sm text-gray-500 mb-1 flex items-center gap-2">{{ item.phonetic }} <el-icon
                             size="18" color="#2563EB" @click="playAudio(item.word)">
@@ -51,6 +51,16 @@
                         <el-tag v-if="item.ky" type="primary" size="small">考研</el-tag>
                     </div>
                 </div>
+                <el-button
+                    size="small"
+                    type="primary"
+                    plain
+                    class="mt-2 self-start"
+                    :loading="addingWord === item.word"
+                    @click.stop="handleAddToMyWords(item.word)"
+                >
+                    加入生词本
+                </el-button>
             </div>
             <el-pagination class="mt-10" background v-model:current-page="query.page" v-model:page-size="query.pageSize"
                 :total="total" @current-change="getList" @size-change="getList" />
@@ -64,6 +74,8 @@ import { getWordBookList } from '@/apis/word-book'
 import type { WordQuery, WordList } from '@en/common/word'
 import { Reading, VideoPlay } from '@element-plus/icons-vue'
 import { useAudio } from '@/hooks/useAudio'
+import { useLogin } from '@/hooks/useLogin'
+import { addMyWords } from '@/apis/my-words'
 import { ElMessage } from 'element-plus'
 import DOMPurify from 'dompurify'
 
@@ -71,6 +83,8 @@ function sanitize(html: string): string {
     return DOMPurify.sanitize(html)
 }
 const { playAudio } = useAudio({})
+const { login } = useLogin()
+const addingWord = ref<string | null>(null)
 const isLoading = ref(false)
 const total = ref<WordList['total']>(0)
 const list = ref<WordList['list']>([])
@@ -104,6 +118,26 @@ const getList = async () => {
         ElMessage.error('加载词库列表失败');
     } finally {
         isLoading.value = false;
+    }
+}
+
+const handleAddToMyWords = async (word: string) => {
+    const ok = await login()
+    if (!ok) return
+    try {
+        addingWord.value = word
+        const res = await addMyWords({ words: [word] })
+        if (res.success) {
+            if (res.data.added.length) {
+                ElMessage.success(`已加入生词本：${word}`)
+            } else if (res.data.skipped.length) {
+                ElMessage.warning(res.data.skipped[0])
+            }
+        }
+    } catch {
+        ElMessage.error('加入生词本失败')
+    } finally {
+        addingWord.value = null
     }
 }
 

@@ -42,3 +42,28 @@ export interface WordQuery {
     cet4?: boolean;
     ky?: boolean;
 }
+
+export type MyWord = {
+    wordId: string;
+    word: string;
+    phonetic?: string;
+    definition?: string;
+    translation?: string;
+    pos?: string;
+    isMaster: boolean;
+    createdAt?: string;
+};
+
+export type MyWordList = {
+    list: MyWord[];
+    total: number;
+};
+
+export type AddWordsDto = {
+    words: string[];
+};
+
+export type MarkMasteredDto = {
+    wordIds?: string[];
+    words?: string[];
+};
