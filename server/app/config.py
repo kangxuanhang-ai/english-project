@@ -71,6 +71,11 @@ class AppSettings(BaseSettings):
     knowledge_chunk_overlap: int = Field(default=50, alias="KNOWLEDGE_CHUNK_OVERLAP")
     knowledge_min_score: float = Field(default=0.5, alias="KNOWLEDGE_MIN_SCORE")
 
+    # Web 设置页生成 Claude MCP 配置片段中的公网 URL
+    mcp_public_url: str = Field(
+        default="http://127.0.0.1:3002/mcp", alias="MCP_PUBLIC_URL"
+    )
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
     @field_validator("secret_key")
