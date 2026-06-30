@@ -1,9 +1,18 @@
 {
+  "_comment_stdio": "开发者本地：在项目根打开 Claude Code，copy 为 .mcp.json",
   "mcpServers": {
-    "english": {
+    "english-stdio": {
       "type": "stdio",
       "command": "uv",
       "args": ["run", "--directory", "server", "python", "-m", "english_mcp"]
+    },
+    "english-http-example": {
+      "type": "http",
+      "url": "https://english.example.com/mcp",
+      "headers": {
+        "ENGLISH-MCP-API-KEY": "en_mcp_live_从Web设置页复制"
+      },
+      "timeout": 60000
     }
   }
 }
