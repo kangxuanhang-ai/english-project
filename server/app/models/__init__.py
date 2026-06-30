@@ -11,6 +11,7 @@ from app.models.visitor import (
 )
 from app.models.conversation import Conversation
 from app.models.knowledge import DocumentStatus, KnowledgeChunk, KnowledgeDocument
+from app.models.mcp_api_key import McpApiKey
 
 __all__ = [
     "User",
@@ -29,4 +30,5 @@ __all__ = [
     "DocumentStatus",
     "KnowledgeDocument",
     "KnowledgeChunk",
+    "McpApiKey",
 ]
