@@ -49,34 +49,6 @@
                         </div>
                     </div>
                 </el-card>
-
-                <el-card shadow="never" class="mt-4">
-                    <template #header>
-                        <div class="flex items-center justify-between">
-                            <div class="font-bold">MCP 连接</div>
-                            <el-button type="primary" size="small" @click="openCreateKey">生成新 Key</el-button>
-                        </div>
-                    </template>
-
-                    <p class="text-sm text-slate-500 mb-3">
-                        在 Claude Code 中连接 English 平台。配置方式与 LangSmith 相同，使用 HTTP MCP + API Key。
-                    </p>
-
-                    <el-table v-if="mcpKeys.length" :data="mcpKeys" size="small">
-                        <el-table-column prop="keyPrefix" label="Key 前缀" min-width="160" />
-                        <el-table-column prop="name" label="备注" min-width="80" />
-                        <el-table-column prop="createdAt" label="创建时间" min-width="150" />
-                        <el-table-column label="最后使用" min-width="120">
-                            <template #default="{ row }">{{ row.lastUsedAt || '—' }}</template>
-                        </el-table-column>
-                        <el-table-column label="操作" width="70">
-                            <template #default="{ row }">
-                                <el-button type="danger" link @click="revokeKey(row.id)">吊销</el-button>
-                            </template>
-                        </el-table-column>
-                    </el-table>
-                    <el-empty v-else description="暂无 MCP Key" :image-size="60" />
-                </el-card>
             </el-col>
 
             <el-col :span="16">
@@ -134,6 +106,65 @@
             </el-col>
         </el-row>
 
+        <el-card shadow="never" class="mt-4">
+            <template #header>
+                <div class="flex items-center justify-between gap-4">
+                    <div class="flex items-center gap-3 min-w-0">
+                        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
+                            <el-icon :size="18"><Connection /></el-icon>
+                        </div>
+                        <div class="min-w-0">
+                            <div class="font-bold text-slate-900">MCP 连接</div>
+                            <div class="text-xs text-slate-500 truncate">
+                                Claude Code 通过 HTTP MCP + API Key 连接 English 平台
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 shrink-0">
+                        <el-tag v-if="mcpKeys.length" type="info" effect="plain" round>
+                            {{ mcpKeys.length }} / 3
+                        </el-tag>
+                        <el-button type="primary" size="small" :disabled="mcpKeys.length >= 3" @click="openCreateKey">
+                            生成新 Key
+                        </el-button>
+                    </div>
+                </div>
+            </template>
+
+            <div v-if="mcpKeys.length" class="space-y-3">
+                <div
+                    v-for="item in mcpKeys"
+                    :key="item.id"
+                    class="group flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-3 transition hover:border-indigo-200 hover:bg-indigo-50/40"
+                >
+                    <div class="min-w-0 flex-1">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <code class="rounded-md bg-white px-2 py-1 text-xs font-mono text-slate-700 ring-1 ring-slate-200">
+                                {{ item.keyPrefix }}…
+                            </code>
+                            <el-tag v-if="item.name" size="small" type="primary" effect="light" round>
+                                {{ item.name }}
+                            </el-tag>
+                        </div>
+                        <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+                            <span>创建 {{ formatMcpTime(item.createdAt) }}</span>
+                            <span>最后使用 {{ formatMcpTime(item.lastUsedAt) }}</span>
+                        </div>
+                    </div>
+                    <el-button
+                        type="danger"
+                        plain
+                        size="small"
+                        class="shrink-0"
+                        @click="revokeKey(item.id)"
+                    >
+                        删除
+                    </el-button>
+                </div>
+            </div>
+            <el-empty v-else description="暂无 MCP Key，点击右上角生成" :image-size="72" />
+        </el-card>
+
         <el-dialog v-model="createKeyVisible" title="生成 MCP Key" width="420px">
             <el-input v-model="newKeyName" placeholder="备注（可选），如：我的 MacBook" maxlength="64" />
             <template #footer>
@@ -164,6 +195,7 @@ import { uploadAvatar } from '@/apis/user' //上传头像接口
 import type { UploadFile,FormInstance } from 'element-plus' //上传文件类型
 import { updateUser } from '@/apis/user' //更新用户信息接口
 import { ElMessage,ElMessageBox } from 'element-plus' //提示信息
+import { Connection } from '@element-plus/icons-vue'
 import { useAvatar } from '@/hooks/useAvatar'
 import { useLogin } from '@/hooks/useLogin'
 import { createMcpKey, listMcpKeys, revokeMcpKey } from '@/apis/mcp-keys'
@@ -310,25 +342,61 @@ const submitCreateKey = async () => {
 }
 
 const revokeKey = (keyId: string) => {
-    ElMessageBox.confirm('吊销后使用该 Key 的 Claude 配置将失效，确定继续？', '吊销 Key', {
+    ElMessageBox.confirm('删除后使用该 Key 的 Claude 配置将失效，确定继续？', '删除 Key', {
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
         type: 'warning',
     }).then(async () => {
         const res = await revokeMcpKey(keyId)
         if (res.success) {
-            ElMessage.success('已吊销')
+            ElMessage.success('已删除')
             await loadMcpKeys()
         } else {
-            ElMessage.error(res.message || '吊销失败')
+            ElMessage.error(res.message || '删除失败')
         }
+    })
+}
+
+const formatMcpTime = (iso: string | null) => {
+    if (!iso) return '—'
+    const date = new Date(iso)
+    if (Number.isNaN(date.getTime())) return iso
+    return date.toLocaleString('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
     })
 }
 
 const copyText = async (text: string) => {
     try {
-        await navigator.clipboard.writeText(text)
-        ElMessage.success('已复制')
+        if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(text)
+            ElMessage.success('已复制')
+            return
+        }
     } catch {
-        ElMessage.error('复制失败')
+        /* 非 localhost 的 HTTP 页面会禁用 Clipboard API，走下方回退 */
+    }
+
+    try {
+        const textarea = document.createElement('textarea')
+        textarea.value = text
+        textarea.style.position = 'fixed'
+        textarea.style.left = '-9999px'
+        document.body.appendChild(textarea)
+        textarea.select()
+        const ok = document.execCommand('copy')
+        document.body.removeChild(textarea)
+        if (ok) {
+            ElMessage.success('已复制')
+        } else {
+            ElMessage.warning('自动复制失败，请手动选中上方文本框内容后 Ctrl+C')
+        }
+    } catch {
+        ElMessage.warning('自动复制失败，请手动选中上方文本框内容后 Ctrl+C')
     }
 }
 

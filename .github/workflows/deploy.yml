@@ -89,7 +89,7 @@ jobs:
             echo "IMAGE_TAG=${IMAGE_TAG}" >> .env
             echo "$GHCR_PULL_TOKEN" | docker login ghcr.io -u ${{ env.IMAGE_OWNER }} --password-stdin
             # 仅拉取本次部署变更的应用镜像，避免每次从 Docker Hub 重拉 postgres/minio 超时
-            docker compose -f docker-compose.yml pull app ai nginx
+            docker compose -f docker-compose.yml pull app ai mcp nginx
             docker compose -f docker-compose.yml up -d --remove-orphans
             docker image prune -f
             echo "Deploy finished. Health: curl -s ${{ env.PUBLIC_HOST }}/health"

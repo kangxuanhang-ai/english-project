@@ -2,12 +2,14 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Union
+from urllib.parse import urlparse
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
 from english_mcp.config import mcp_settings
 from english_mcp import db as mcp_db
+from english_mcp.runtime import is_http_mode
 from english_mcp.tools_handlers import (
     run_add_words_to_review,
     run_check_grammar,
@@ -28,27 +30,49 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_server: FastMCP) -> AsyncIterator[None]:
-    mcp_db.init_db(
-        mcp_settings.database_url,
-        pool_size=mcp_settings.mcp_db_pool_size,
-        max_overflow=mcp_settings.mcp_db_max_overflow,
-    )
-    logger.info("english_mcp DB pool initialized")
+    # HTTP 模式在 http_server 进程启动时初始化 DB；stdio 在此初始化
+    if not is_http_mode():
+        mcp_db.init_db(
+            mcp_settings.database_url,
+            pool_size=mcp_settings.mcp_db_pool_size,
+            max_overflow=mcp_settings.mcp_db_max_overflow,
+        )
+        logger.info("english_mcp DB pool initialized")
     try:
         yield
     finally:
-        await mcp_db.dispose_db()
-        logger.info("english_mcp DB pool disposed")
+        if not is_http_mode():
+            await mcp_db.dispose_db()
+            logger.info("english_mcp DB pool disposed")
 
 
 def _transport_security() -> TransportSecuritySettings | None:
-    if mcp_settings.mcp_http_host in ("0.0.0.0", "::"):
-        return TransportSecuritySettings(
-            enable_dns_rebinding_protection=True,
-            allowed_hosts=["*"],
-            allowed_origins=["*"],
-        )
-    return None
+    if mcp_settings.mcp_http_host not in ("0.0.0.0", "::"):
+        return None
+
+    port = mcp_settings.mcp_http_port
+    allowed_hosts = [
+        f"127.0.0.1:{port}",
+        f"localhost:{port}",
+        f"127.0.0.1:*",
+        f"localhost:*",
+    ]
+
+    if mcp_settings.mcp_public_url:
+        parsed = urlparse(mcp_settings.mcp_public_url)
+        if parsed.hostname:
+            allowed_hosts.append(f"{parsed.hostname}:{parsed.port or port}")
+            allowed_hosts.append(f"{parsed.hostname}:*")
+            # Nginx 反代 80 端口时 Host 常为纯 IP/域名，不带 :80
+            if parsed.port in (None, 80, 443):
+                allowed_hosts.append(parsed.hostname)
+
+    # MCP 库只做精确匹配或 host:* 模式，不支持 allowed_hosts=["*"]
+    return TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=list(dict.fromkeys(allowed_hosts)),
+        allowed_origins=[],
+    )
 
 
 mcp = FastMCP(

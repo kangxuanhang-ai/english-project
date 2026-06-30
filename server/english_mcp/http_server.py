@@ -20,9 +20,15 @@ def main() -> None:
     import uvicorn
 
     from english_mcp.config import mcp_settings
+    from english_mcp import db as mcp_db
     from english_mcp.middleware import McpApiKeyMiddleware
     from english_mcp.server import mcp
 
+    mcp_db.init_db(
+        mcp_settings.database_url,
+        pool_size=mcp_settings.mcp_db_pool_size,
+        max_overflow=mcp_settings.mcp_db_max_overflow,
+    )
     logger = logging.getLogger(__name__)
     host = mcp_settings.mcp_http_host
     port = mcp_settings.mcp_http_port

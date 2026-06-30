@@ -8,6 +8,8 @@ async_session: async_sessionmaker[AsyncSession] | None = None
 
 def init_db(database_url: str, *, pool_size: int = 5, max_overflow: int = 10) -> None:
     global engine, async_session
+    if async_session is not None:
+        return
     url = normalize_database_url(database_url)
     engine = create_async_engine(
         url,

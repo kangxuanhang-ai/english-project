@@ -8,7 +8,8 @@
     "admin": "pnpm --filter @en/admin dev",
     "server": "cd server && uv run python -m uvicorn app.main:socket_app --host 0.0.0.0 --port 3000 --reload",
     "ai": "cd server && uv run python -m uvicorn ai.main:ai_app --host 0.0.0.0 --port 3001 --reload",
-    "all": "concurrently \"pnpm run web\" \"pnpm run admin\" \"pnpm run server\" \"pnpm run ai\""
+    "mcp": "cd server && uv run python -m english_mcp.http_server",
+    "all": "concurrently \"pnpm run web\" \"pnpm run admin\" \"pnpm run server\" \"pnpm run ai\" \"pnpm run mcp\""
   },
   "dependencies": {
     "@types/md5": "^2.3.6",

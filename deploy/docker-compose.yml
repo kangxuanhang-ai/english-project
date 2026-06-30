@@ -95,6 +95,29 @@ services:
         limits:
           memory: 1536M
 
+  mcp:
+    image: ghcr.io/${GHCR_OWNER:-kangxuanhang-ai}/english-project/server:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      ENGLISH_MCP_HTTP: "1"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      app:
+        condition: service_started
+    entrypoint: ["/entrypoint-app.sh"]
+    command:
+      - uv
+      - run
+      - python
+      - -m
+      - english_mcp.http_server
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
   nginx:
     image: ghcr.io/${GHCR_OWNER:-kangxuanhang-ai}/english-project/nginx:${IMAGE_TAG:-latest}
     restart: unless-stopped
@@ -103,6 +126,7 @@ services:
     depends_on:
       - app
       - ai
+      - mcp
       - minio
     deploy:
       resources:

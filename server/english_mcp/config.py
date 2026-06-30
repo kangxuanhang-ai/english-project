@@ -16,6 +16,7 @@ class MCPSettings(BaseSettings):
     mcp_db_max_overflow: int = Field(default=10, alias="MCP_DB_MAX_OVERFLOW")
     mcp_http_port: int = Field(default=3002, alias="MCP_HTTP_PORT")
     mcp_http_host: str = Field(default="127.0.0.1", alias="MCP_HTTP_HOST")
+    mcp_public_url: str = Field(default="", alias="MCP_PUBLIC_URL")
     mcp_grammar_require_key: bool = Field(default=False, alias="MCP_GRAMMAR_REQUIRE_KEY")
 
     model_config = {

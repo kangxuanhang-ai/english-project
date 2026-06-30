@@ -48,6 +48,17 @@ async def _touch_last_used_async(key_hash: str) -> None:
         logger.warning("更新 MCP Key last_used_at 失败: %s", exc)
 
 
+def _extract_api_key(scope: dict) -> str | None:
+    raw = _extract_header(scope, _HEADER_NAME)
+    if raw:
+        return raw
+
+    auth = _extract_header(scope, b"authorization")
+    if auth and auth.lower().startswith("bearer "):
+        return auth[7:].strip()
+    return None
+
+
 class McpApiKeyMiddleware:
     """解析 ENGLISH-MCP-API-KEY Header 并写入 ContextVar。"""
 
@@ -64,7 +75,7 @@ class McpApiKeyMiddleware:
             set_invalid_key_header(False)
             set_client_ip(_extract_client_ip(scope))
 
-            raw_key = _extract_header(scope, _HEADER_NAME)
+            raw_key = _extract_api_key(scope)
             if raw_key:
                 if not raw_key.startswith(KEY_PREFIX):
                     set_invalid_key_header(True)
@@ -75,15 +86,16 @@ class McpApiKeyMiddleware:
                         user_id = await resolve_user_by_key(session, raw_key)
                     if user_id:
                         key_hash = _hash_key(raw_key)
-                        set_mcp_user(
-                            AuthenticatedMcpUser(
-                                user_id=user_id,
-                                key_prefix=raw_key[:24],
-                                key_hash=key_hash,
-                            )
+                        user = AuthenticatedMcpUser(
+                            user_id=user_id,
+                            key_prefix=raw_key[:24],
+                            key_hash=key_hash,
                         )
+                        set_mcp_user(user)
+                        scope["english_mcp_user"] = user
                         asyncio.create_task(_touch_last_used_async(key_hash))
                     else:
                         set_invalid_key_header(True)
+                        scope["english_mcp_invalid_key"] = True
 
         await self.app(scope, receive, send)

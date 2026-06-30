@@ -28,7 +28,7 @@ def build_claude_config(raw_key: str, public_url: str) -> dict:
                 "type": "http",
                 "url": public_url,
                 "headers": {
-                    "ENGLISH-MCP-API-KEY": raw_key,
+                    "english-mcp-api-key": raw_key,
                 },
                 "timeout": 60000,
             }
