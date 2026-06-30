@@ -58,7 +58,7 @@ Root `package.json` defines convenience scripts via `concurrently`. The `server/
 ### Backend: Two FastAPI Apps
 `server/` contains two FastAPI applications sharing a common `shared/` directory:
 
-**app/** (port 3000): Main REST API. Routers: user, word_book, course, pay, learn, tracker. Socket.IO mounted as ASGI app via `socket_app = socketio.ASGIApp(sio, app)`. JWT auth with access/refresh tokens. Alipay payment (sandbox). Global middleware wraps all 2xx responses into `{timestamp, path, message, code, success, data}` envelope.
+**app/** (port 3000): Main REST API. Routers: user, word_book, course, pay, learn, tracker, admin (sub-routers: dashboard, users, courses, orders, analytics, knowledge). Socket.IO mounted as ASGI app via `socket_app = socketio.ASGIApp(sio, app)`. JWT auth with access/refresh tokens. CORS middleware configured. SlowAPI rate limiting. Alipay payment (sandbox). Global middleware wraps all 2xx responses into `{timestamp, path, message, code, success, data}` envelope.
 
 **ai/** (port 3001): AI service. Routers: chat, conversation, prompt, recommend. DeepSeek via LangChain with deep-thinking (reasoner) mode. LangChain `create_agent` (via `agent_factory`) with `@dynamic_prompt` middleware and PostgresCheckpointer for chat history. Optional LangSmith tracing when `LANGCHAIN_API_KEY` is set. Bocha Search API for web grounding. APScheduler for digest jobs. Slowapi for rate limiting. Imports response envelope middleware and exception handlers from `app/middleware.py`. Chat accepts `deepThink` and `webSearch` flags (mutually exclusive — `deepThink` takes priority).
 
@@ -71,9 +71,6 @@ Root `package.json` defines convenience scripts via `concurrently`. The `server/
 **app/services/**: Business logic layer, one per router domain.
 
 **alembic/**: Database migrations. Config in `alembic.ini`. Models imported in `alembic/env.py`.
-
-### Admin Dashboard: @en/admin (apps/admin)
-React 18 admin panel on port 8081. Uses Ant Design 5, React Router DOM 6, TanStack React Query, Zustand for state, Axios for HTTP. Routes: Dashboard, Users, Courses, Orders, Analytics, Knowledge Base. Depends on `@en/common` for types and `@en/config` for port constants. Proxies `/api` to the main server — no separate admin router on the backend.
 
 ### AI Chat Architecture
 
@@ -113,6 +110,9 @@ Routes: Home, WordBook, Setting, Chat, Course. Views are in `src/views/` (not `s
 **Frontend hooks** (`src/hooks/`): `useAudio`, `useAvatar`, `useLogin`, `useSocket`, `useVoiceToText` (Web Speech API), `useTTS`, `useTracker`, `useCourseAction`, `useDashboardExport`.
 
 **3D/animation**: Three.js models in `components/Login/ModelViewer.vue` and `views/Home/components/Hologram.vue`. GSAP for animations. DOMPurify + marked for markdown rendering in chat.
+
+### Admin Dashboard: @en/admin (apps/admin)
+React 18 admin panel on port 8081. Uses Ant Design 5, React Router DOM 6, TanStack React Query, Zustand for state, Axios for HTTP. Routes: Dashboard, Users, Courses, Orders, Analytics, Knowledge Base. Depends on `@en/common` for types and `@en/config` for port constants. Backend admin routes are under `server/app/routers/admin/` (prefix `/api/v1/admin`), guarded by `get_current_admin` dependency.
 
 ### Tracker: @en/tracker
 Client SDK reporting UV (FingerprintJS), PV, events, JS errors, Web Vitals. Exports a `Tracker` class with `setUserId(userId)` to associate visitors with logged-in users.
