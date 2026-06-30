@@ -119,12 +119,16 @@ def build_claude_config(raw_key: str, public_url: str) -> dict:
 - [ ] **Step 4: 实现 `resolve_user_by_key(db, raw_key) -> str | None`**
 
 - 格式须以 `KEY_PREFIX` 开头，否则 `None`
-- 查 `key_hash` + `revoked_at IS NULL`；`hmac.compare_digest` 比较 hash（查到的 hash 与计算 hash）
-- 返回 `user_id` 或 `None`
+- `computed = _hash_key(raw_key)` → `SELECT ... WHERE key_hash = computed AND revoked_at IS NULL`
+- 命中则返回 `user_id`；**不要**全表扫描再 `compare_digest`（hash 已唯一索引）
 
-- [ ] **Step 5: 实现 `touch_last_used(db, key_hash)`**（供 MCP 中间件异步调用）
+- [ ] **Step 5: 实现 `touch_last_used(db, key_hash)`**（供 MCP 中间件 `create_task` 异步调用；内部独立 `async_session`）
 
-- [ ] **Step 6: Commit** `feat(api): add mcp_api_key service`
+- [ ] **Step 6: Service 返回字段用 camelCase**（与 `my_words` 一致：`keyPrefix`, `lastUsedAt`, `claudeConfig`）
+
+- [ ] **Step 7: `id` 用 `nanoid.generate()`**（与项目其他模型一致）
+
+- [ ] **Step 8: Commit** `feat(api): add mcp_api_key service`
 
 ---
 
@@ -152,7 +156,7 @@ class CreateMcpKeyDto(BaseModel):
 
 - [ ] **Step 3: Router `/api/v1/user/mcp-keys`**
 
-挂 `get_current_user` + `get_db`：
+挂 `get_current_user` + `get_db`；**JWT 取 `user["userId"]`**（camelCase，与全项目一致）：
 
 | 方法 | 行为 |
 |------|------|
@@ -254,45 +258,53 @@ def is_http_mode() -> bool:
 - Create: `server/english_mcp/middleware.py`
 - Modify: `server/english_mcp/http_server.py`, `server/english_mcp/server.py`
 
-- [ ] **Step 1: 实现 `McpApiKeyMiddleware`**
+- [ ] **Step 1: 实现 `McpApiKeyMiddleware`（纯 ASGI，须转发 lifespan）**
 
 ```python
-HEADER = "english-mcp-api-key"  # Starlette headers 大小写不敏感
+HEADER = b"english-mcp-api-key"  # scope["headers"] 为 lower-case bytes
 
 class McpApiKeyMiddleware:
     def __init__(self, app):
         self.app = app
 
     async def __call__(self, scope, receive, send):
+        if scope["type"] == "lifespan":
+            await self.app(scope, receive, send)  # 必须转发，否则 session_manager / MCP 起不来
+            return
         if scope["type"] == "http":
             set_mcp_user(None)
             set_invalid_key_header(False)
             raw = _extract_header(scope, HEADER)
             if raw:
-                user_id = await _resolve_in_session(raw)
-                if user_id:
-                    set_mcp_user(AuthenticatedMcpUser(...))
-                    asyncio.create_task(_touch_async(raw))
+                auth = await _resolve_in_session(raw)  # -> AuthenticatedMcpUser | None
+                if auth:
+                    set_mcp_user(auth)
+                    asyncio.create_task(touch_last_used_async(auth.key_hash))
                 else:
                     set_invalid_key_header(True)
         await self.app(scope, receive, send)
 ```
 
+- `_extract_client_ip(scope)`：优先 `x-forwarded-for` 首段，否则 `scope["client"][0]`；写入 ContextVar 供匿名 grammar 限流
 - `_resolve_in_session` 调 `mcp_db.async_session` + `resolve_user_by_key`
 
 - [ ] **Step 2: 重写 `http_server.py` 启动**
 
 ```python
-os.environ["ENGLISH_MCP_HTTP"] = "1"
+os.environ["ENGLISH_MCP_HTTP"] = "1"  # 必须在 import auth 之前
 from english_mcp.server import mcp
-app = mcp.streamable_http_app()
-app = McpApiKeyMiddleware(app)
-uvicorn.run(app, host=..., port=...)
+from english_mcp.middleware import McpApiKeyMiddleware
+
+inner = mcp.streamable_http_app()  # 内含 lifespan → session_manager.run()
+app = McpApiKeyMiddleware(inner)
+uvicorn.run(app, host=mcp_settings.mcp_http_host, port=mcp_settings.mcp_http_port)
 ```
 
-不再调用 `mcp.run(transport="streamable-http")`。
+**勿**在 middleware 外再包一层丢失 lifespan 的 wrapper。若仍有问题，fallback：`http_server` 启动时显式 `mcp_db.init_db()` + shutdown `dispose_db()`。
 
 - [ ] **Step 3: `server.py` FastMCP 构造增加 `stateless_http=True`**
+
+- 生产 `MCP_HTTP_HOST=0.0.0.0` 时配置 `transport_security` allowed_hosts（见 Task D.3）
 
 - [ ] **Step 4: Commit** `feat(mcp): add ENGLISH-MCP-API-KEY middleware for HTTP`
 
@@ -337,21 +349,18 @@ def resolve_progress_user_id() -> tuple[str | None, str | None]:
 **Files:**
 - Create: `server/scripts/smoke_mcp_keys.py`
 
-- [ ] **Step 1: 脚本流程**
+- [ ] **Step 1: 脚本分两层**
 
-1. Login 或 DB 取 JWT → POST `/api/v1/user/mcp-keys` 创建 Key
-2. 直接调 `run_get_learning_progress` **无** ContextVar → 应 error（或启 subprocess HTTP 不现实时，用 httpx POST `/mcp` 带 Header）
-3. 用 `httpx` + `ENGLISH-MCP-API-KEY` Header 调 MCP initialize + tools/list（或调 handler 前 `set_mcp_user` 模拟）
-4. 吊销 Key → 再调应失败
+**层 1（必选，不启 HTTP）**：JWT login → API CRUD；对 handler 测试：
 
-**推荐**：handler 层单测 + 单独 subprocess 启动 `http_server` 5 秒做 httpx 集成（与答辩验收一致）。
-
-```powershell
-cd server
-uv run python scripts/smoke_mcp_keys.py
+```python
+set_mcp_user(AuthenticatedMcpUser(user_id=..., key_prefix=..., key_hash=...))
+assert "error" not in json.loads(await run_get_learning_progress())
+set_mcp_user(None); os.environ["ENGLISH_MCP_HTTP"] = "1"
+assert "error" in json.loads(await run_get_learning_progress())  # HTTP 模式无 Key
 ```
 
-Expected: `OK`
+**层 2（可选）**：subprocess 启 `http_server` + `httpx` POST `/mcp` 带 Header（Streamable HTTP 需 `Accept: application/json, text/event-stream`）
 
 - [ ] **Step 2: Commit** `test: add end-to-end smoke for MCP API key auth`
 
@@ -363,9 +372,8 @@ Expected: `OK`
 
 **Files:**
 - Create: `packages/common/mcp/index.ts`, `apps/web/src/apis/mcp-keys/index.ts`
-- Modify: `packages/common/index.ts`（若需 re-export）
 
-- [ ] **Step 1: 类型**
+- [ ] **Step 1: 类型**（导入路径 `@en/common/mcp`，与 `@en/common/word` 同模式；**无** `packages/common/index.ts`）
 
 ```typescript
 export interface McpApiKeyItem {
@@ -471,6 +479,32 @@ location /mcp {
 
 ---
 
+### Task D.3: 生产 FastMCP 安全参数
+
+**Files:**
+- Modify: `server/english_mcp/server.py`, `server/.env.example`
+
+- [ ] **Step 1: 当 `MCP_HTTP_HOST=0.0.0.0` 时设置 `transport_security`**
+
+```python
+from mcp.server.transport_security import TransportSecuritySettings
+
+transport_security = None
+if mcp_settings.mcp_http_host == "0.0.0.0":
+    transport_security = TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=["*"],  # 由 Nginx 终止 TLS；或填具体域名
+        allowed_origins=["*"],
+    )
+mcp = FastMCP(..., stateless_http=True, transport_security=transport_security)
+```
+
+- [ ] **Step 2: `.env.example` 补充 `MCP_HTTP_HOST=0.0.0.0` 生产示例**
+
+- [ ] **Step 3: Commit** `chore(mcp): configure transport security for public HTTP bind`
+
+---
+
 ## Plan Self-Review
 
 | Spec 章节 | 对应 Task |
@@ -480,9 +514,23 @@ location /mcp {
 | §5 HTTP 鉴权 | B.1–B.3 |
 | §5.4 HTTP 禁 demo 回退 | B.3 `is_http_mode()` |
 | §6 设置页 | C.1, C.2 |
-| §7 部署 | D.1 |
+| §7 部署 | D.1, D.3 |
 | §9 冒烟 | A.4, B.4 |
 | §7.2 匿名 grammar | B.3 |
+
+### 二次审查（2026-06-30）
+
+| 严重度 | 问题 | 处理 |
+|--------|------|------|
+| 🔴 高 | ASGI middleware 不转发 `lifespan` → MCP session/DB 不初始化 | B.2 明确要求转发 `lifespan` |
+| 🔴 高 | `resolve_user_by_key` 误写为 compare_digest 全表扫描 | A.2 改为 hash 唯一索引直查 |
+| 🟡 中 | JWT 字段应为 `user["userId"]` | A.2 Step 6 |
+| 🟡 中 | API 响应需 camelCase | A.2 Step 7 |
+| 🟡 中 | `@en/common` 无根 index，应用 `@en/common/mcp` | C.1 |
+| 🟡 中 | Nginx 后匿名限流需读 `X-Forwarded-For` | B.2 |
+| 🟡 中 | 生产 `0.0.0.0` 需 `transport_security` | D.3 新增 |
+| 🟢 低 | B.4 冒烟应用 handler + ContextVar，HTTP 集成可选 | B.4 分层 |
+| 🟢 低 | `touch_last_used` 需独立 session | A.2 Step 5 |
 
 无 TBD；测试以 smoke 脚本 + 手动 Claude CLI 为主（项目无 pytest）。
 
@@ -504,6 +552,7 @@ location /mcp {
 | 日期 | 修订 |
 |------|------|
 | 2026-06-30 | 初稿：Phase A–D，对齐 spec 二次审查 |
+| 2026-06-30 | 计划二次审查：lifespan 转发、hash 直查、camelCase、transport_security、冒烟分层 |
 
 ---
 
