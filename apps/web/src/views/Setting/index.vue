@@ -49,6 +49,34 @@
                         </div>
                     </div>
                 </el-card>
+
+                <el-card shadow="never" class="mt-4">
+                    <template #header>
+                        <div class="flex items-center justify-between">
+                            <div class="font-bold">MCP 连接</div>
+                            <el-button type="primary" size="small" @click="openCreateKey">生成新 Key</el-button>
+                        </div>
+                    </template>
+
+                    <p class="text-sm text-slate-500 mb-3">
+                        在 Claude Code 中连接 English 平台。配置方式与 LangSmith 相同，使用 HTTP MCP + API Key。
+                    </p>
+
+                    <el-table v-if="mcpKeys.length" :data="mcpKeys" size="small">
+                        <el-table-column prop="keyPrefix" label="Key 前缀" min-width="160" />
+                        <el-table-column prop="name" label="备注" min-width="80" />
+                        <el-table-column prop="createdAt" label="创建时间" min-width="150" />
+                        <el-table-column label="最后使用" min-width="120">
+                            <template #default="{ row }">{{ row.lastUsedAt || '—' }}</template>
+                        </el-table-column>
+                        <el-table-column label="操作" width="70">
+                            <template #default="{ row }">
+                                <el-button type="danger" link @click="revokeKey(row.id)">吊销</el-button>
+                            </template>
+                        </el-table-column>
+                    </el-table>
+                    <el-empty v-else description="暂无 MCP Key" :image-size="60" />
+                </el-card>
             </el-col>
 
             <el-col :span="16">
@@ -105,6 +133,24 @@
                 </el-card>
             </el-col>
         </el-row>
+
+        <el-dialog v-model="createKeyVisible" title="生成 MCP Key" width="420px">
+            <el-input v-model="newKeyName" placeholder="备注（可选），如：我的 MacBook" maxlength="64" />
+            <template #footer>
+                <el-button @click="createKeyVisible = false">取消</el-button>
+                <el-button type="primary" :loading="creatingKey" @click="submitCreateKey">生成</el-button>
+            </template>
+        </el-dialog>
+
+        <el-dialog v-model="keyRevealVisible" title="请保存 Key（仅显示一次）" width="560px">
+            <el-alert type="warning" :closable="false" show-icon class="mb-3"
+                title="关闭后将无法再次查看完整 Key，请立即复制。" />
+            <el-input type="textarea" :rows="2" readonly :model-value="revealedKey" />
+            <div class="mt-3 flex gap-2">
+                <el-button @click="copyText(revealedKey)">复制 Key</el-button>
+                <el-button type="primary" @click="copyText(revealedConfig)">复制 Claude 配置</el-button>
+            </div>
+        </el-dialog>
     </div>
 </template>
 
@@ -120,6 +166,8 @@ import { updateUser } from '@/apis/user' //更新用户信息接口
 import { ElMessage,ElMessageBox } from 'element-plus' //提示信息
 import { useAvatar } from '@/hooks/useAvatar'
 import { useLogin } from '@/hooks/useLogin'
+import { createMcpKey, listMcpKeys, revokeMcpKey } from '@/apis/mcp-keys'
+import type { McpApiKeyItem } from '@en/common/mcp'
 const { customAvatar } = useAvatar()
 const { logout } = useLogin()
 const formRef = useTemplateRef<FormInstance>('formRef') //表单ref
@@ -127,6 +175,13 @@ const userStore = useUserStore()
 const previewUrl = ref<string>('')
 const pageLoading = ref(true)
 const saving = ref(false)
+const mcpKeys = ref<McpApiKeyItem[]>([])
+const createKeyVisible = ref(false)
+const keyRevealVisible = ref(false)
+const newKeyName = ref('')
+const creatingKey = ref(false)
+const revealedKey = ref('')
+const revealedConfig = ref('')
 const form = ref<UserUpdate>({
     name: '', //用户名
     email: '', //邮箱
@@ -214,6 +269,66 @@ const init = () => {
     if(userStore.getUser) {
         form.value = {...userStore.getUpdateUserInfo}
         previewUrl.value = customAvatar(form.value.avatar!)
+        loadMcpKeys()
+    }
+}
+
+const loadMcpKeys = async () => {
+    try {
+        const res = await listMcpKeys()
+        if (res.success && res.data) {
+            mcpKeys.value = res.data
+        }
+    } catch {
+        /* 设置页次要功能，静默失败 */
+    }
+}
+
+const openCreateKey = () => {
+    newKeyName.value = ''
+    createKeyVisible.value = true
+}
+
+const submitCreateKey = async () => {
+    creatingKey.value = true
+    try {
+        const res = await createMcpKey({ name: newKeyName.value })
+        if (res.success && res.data) {
+            createKeyVisible.value = false
+            revealedKey.value = res.data.key
+            revealedConfig.value = JSON.stringify(res.data.claudeConfig, null, 2)
+            keyRevealVisible.value = true
+            await loadMcpKeys()
+        } else {
+            ElMessage.error(res.message || '生成失败')
+        }
+    } catch {
+        ElMessage.error('生成失败，请重试')
+    } finally {
+        creatingKey.value = false
+    }
+}
+
+const revokeKey = (keyId: string) => {
+    ElMessageBox.confirm('吊销后使用该 Key 的 Claude 配置将失效，确定继续？', '吊销 Key', {
+        type: 'warning',
+    }).then(async () => {
+        const res = await revokeMcpKey(keyId)
+        if (res.success) {
+            ElMessage.success('已吊销')
+            await loadMcpKeys()
+        } else {
+            ElMessage.error(res.message || '吊销失败')
+        }
+    })
+}
+
+const copyText = async (text: string) => {
+    try {
+        await navigator.clipboard.writeText(text)
+        ElMessage.success('已复制')
+    } catch {
+        ElMessage.error('复制失败')
     }
 }
 
