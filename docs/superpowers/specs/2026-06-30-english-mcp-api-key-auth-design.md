@@ -68,7 +68,7 @@
 
 | 变量 | 用途 |
 |------|------|
-| `MCP_PUBLIC_URL` | 设置页生成 Claude 配置片段中的 URL，如 `https://english.example.com/mcp` |
+| `MCP_PUBLIC_URL` | 设置页生成 Claude 配置片段中的 URL（**主 API** `app/config.py`，非 `english_mcp`） |
 | `MCP_HTTP_HOST` / `MCP_HTTP_PORT` | MCP 进程监听（生产 `0.0.0.0:3002`） |
 | `ENGLISH_MCP_DEMO_USER_ID` | **仅开发/stdio 回退**；生产 HTTP 可不配 |
 
@@ -83,7 +83,7 @@
 | `id` | `String(30)` PK | nanoid |
 | `user_id` | `String(30)` FK → `user.id` | 所属用户 |
 | `name` | `String(64)` | 用户备注，如「我的 MacBook」 |
-| `key_prefix` | `String(16)` | 明文前缀，用于列表展示，如 `en_mcp_live_a1b2` |
+| `key_prefix` | `String(24)` | 展示用前缀，如 `en_mcp_live_7Kx9mN2p`（固定前缀 + 随机段前 8 位） |
 | `key_hash` | `String(64)` | SHA-256(完整 key)，不可逆 |
 | `created_at` | `DateTime` | 创建时间 |
 | `last_used_at` | `DateTime` nullable | 最近一次成功校验 |
@@ -181,14 +181,32 @@ ENGLISH-MCP-API-KEY: en_mcp_live_...
 
 ```python
 def resolve_progress_user_id() -> tuple[str | None, str | None]:
-    # 1. HTTP 请求上下文（ContextVar，来自 Header 校验）
-    # 2. stdio 开发回退：ENGLISH_MCP_API_KEY + ENGLISH_MCP_USER_ID（.env）
-    # 3. stdio demo 回退：ENGLISH_MCP_DEMO_USER_ID
+    # HTTP 模式（english_mcp.http_server）：
+    #   仅 ContextVar（Header 校验结果）；禁止 ENGLISH_MCP_DEMO_USER_ID / .env 配对回退
+    # stdio 模式（python -m english_mcp）：
+    #   1. ENGLISH_MCP_API_KEY + ENGLISH_MCP_USER_ID（.env，本地开发）
+    #   2. ENGLISH_MCP_DEMO_USER_ID（demo 回退）
 ```
 
-`rate_limit_key()`：优先 Key prefix，其次 `"anonymous"`。
+**重要**：HTTP 生产路径若仍回退 demo user，则任意人可无 Key 访问个性化 tool，必须禁用。
 
-### 5.5 与 FastMCP 内置 OAuth 的关系
+`rate_limit_key()`：HTTP 模式优先 `key_prefix`（来自 ContextVar）；stdio 用 env Key；否则 `"anonymous"`。
+
+**无效 Key**（Header 有值但校验失败）：ContextVar 为 `None`；私有 tool 返回 `{ "error": "ENGLISH-MCP-API-KEY 无效或已吊销" }`（与「未提供 Key」区分）。
+
+### 5.5 中间件挂载方式
+
+FastMCP 无「自定义 Header 鉴权」插件。实现路径：
+
+1. `http_server.py` 调用 `app = mcp.streamable_http_app()` 取得 Starlette app
+2. 外包一层 `Middleware` 读取 `ENGLISH-MCP-API-KEY` → `resolve_user_by_key` → 写入 ContextVar
+3. 用 `uvicorn.run(wrapped_app)` 启动（**不**再直接 `mcp.run(transport=...)`，或在其前替换 app）
+
+`last_used_at` 更新：校验成功后 `asyncio.create_task` 异步写库，不阻塞 MCP 响应。
+
+生产建议 `stateless_http=True`（FastMCP 构造参数），便于 Nginx 后多 worker；每请求独立 ContextVar。
+
+### 5.6 与 FastMCP 内置 OAuth 的关系
 
 **不使用** FastMCP `BearerAuthBackend`（仅支持标准 Bearer）。采用 **自定义 Starlette 中间件** 解析 `ENGLISH-MCP-API-KEY`，与 LangSmith Header 名一致。
 
@@ -232,8 +250,10 @@ location /mcp {
 | Key 存储 | 仅 hash；明文不落库、不写日志 |
 | 传输 | 生产必须 HTTPS |
 | 吊销 | 即时生效（查库见 `revoked_at`） |
-| 暴力猜测 | Key 空间 ≥ 2^192；失败校验不写 `last_used_at`；可选 SlowAPI 按 IP 限流 |
+| 暴力猜测 | Key 空间 ≥ 2^192；`hmac.compare_digest` 比较 hash；失败不写 `last_used_at` |
+| 匿名滥用 | `check_grammar` 调 DeepSeek 有成本；匿名限流 **3/min/IP**（严于现有 15/min/Key）；生产可配置 `MCP_GRAMMAR_REQUIRE_KEY=true` 强制要 Key |
 | 日志 | 禁止打印完整 Key；可记录 `key_prefix` |
+| 多 worker | 语法限流当前为进程内 dict，HTTP 生产需 Redis 或接受 per-worker 限额（与现有 grammar 一致，文档注明） |
 
 ### 7.3 进程
 
@@ -286,14 +306,32 @@ uv run python -m english_mcp.http_server   # 或 systemd 单元 english-mcp.serv
 
 ---
 
-## 11. Spec Self-Review
+## 11. Spec Self-Review（二次审查 2026-06-30）
 
 | 检查项 | 结果 |
 |--------|------|
 | TBD / 占位 | 无 |
-| 内部矛盾 | 无；HTTP 用自定义 Header，stdio 保留 env 回退 |
-| 范围 | 单 spec 可拆 4 个 Phase 实施 |
-| 歧义 | Key 权限在 tool 级明确；公开/私有 tool 列表固定 |
+| 内部矛盾 | 已修：HTTP 模式禁止 demo/env 回退（§5.4） |
+| 范围 | 单 spec 可拆 4 Phase |
+| 歧义 | 已修：无效 Key vs 未提供 Key 错误文案；`key_prefix` 长度 |
+
+**审查发现（已写入 spec 或 Phase D）：**
+
+| 严重度 | 问题 | 处理 |
+|--------|------|------|
+| 🔴 高 | HTTP 仍走 `DEMO_USER_ID` 会绕过 Key | §5.4 明确 HTTP 仅 ContextVar |
+| 🔴 高 | 匿名 `check_grammar` 可刷 DeepSeek 费用 | §7.2 加强 IP 限流 + 可选强制 Key |
+| 🟡 中 | FastMCP 无原生自定义 Header 鉴权 | §5.5 明确 wrap Starlette app |
+| 🟡 中 | `key_prefix` 字段 16 字符不够 | 改为 24 |
+| 🟡 中 | `MCP_PUBLIC_URL` 应属主 API config | §2 已注明 |
+| 🟡 中 | `docs/deploy/nginx.example.conf` 尚无 `/mcp` | Phase D 补 upstream + location |
+| 🟢 低 | 语法限流进程内 dict，多 worker 不共享 | §7.2 注明，与现网一致 |
+| 🟢 低 | 生产 `0.0.0.0` 需配置 FastMCP `transport_security` | Phase D 部署清单补充 |
+
+**仍接受的风险（本阶段）：**
+
+- Key 校验每请求查库：量级答辩可接受；高 QPS 再加 Redis 缓存 hash→user_id
+- 不做 Key 轮换/过期时间（仅手动吊销）
 
 ---
 
@@ -302,3 +340,4 @@ uv run python -m english_mcp.http_server   # 或 systemd 单元 english-mcp.serv
 | 日期 | 修订 |
 |------|------|
 | 2026-06-30 | 初稿：方案 1 + Web 发 Key + `ENGLISH-MCP-API-KEY` Header（对齐 LangSmith） |
+| 2026-06-30 | 二次审查：HTTP 禁 demo 回退、中间件挂载、key_prefix 长度、匿名 grammar 限流 |
