@@ -37,6 +37,8 @@ jobs:
           context: .
           file: docker/server/Dockerfile
           push: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/english-project/server:latest
             ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/english-project/server:${{ github.sha }}
@@ -48,6 +50,8 @@ jobs:
           context: .
           file: docker/nginx/Dockerfile
           push: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           build-args: |
             VITE_MINIO_ENDPOINT=${{ env.PUBLIC_HOST }}/minio
             VITE_SOCKET_URL=

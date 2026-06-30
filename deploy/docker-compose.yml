@@ -101,6 +101,7 @@ services:
     env_file: .env
     environment:
       ENGLISH_MCP_HTTP: "1"
+      MCP_HTTP_HOST: "0.0.0.0"
     depends_on:
       postgres:
         condition: service_healthy
