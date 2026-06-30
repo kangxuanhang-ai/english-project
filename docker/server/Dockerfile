@@ -1,5 +1,6 @@
 # 主 API + AI 服务共用镜像，启动命令由 compose 区分
-FROM python:3.12-slim-bookworm
+ARG BASE_IMAGE=python:3.12-slim-bookworm
+FROM ${BASE_IMAGE}
 
 WORKDIR /app
 

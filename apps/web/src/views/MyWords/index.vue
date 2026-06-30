@@ -18,7 +18,7 @@
         </el-tabs>
 
         <div v-if="isLoading" class="grid grid-cols-3 gap-3 mt-6">
-            <div v-for="n in 6" :key="n" class="bg-white border border-emerald-100 rounded-[10px] p-4 h-[200px] animate-pulse" />
+            <div v-for="n in 6" :key="n" class="bg-white border border-emerald-100 rounded-[10px] p-4 min-h-[220px] animate-pulse" />
         </div>
 
         <div v-else-if="list.length === 0" class="py-16">
@@ -29,16 +29,19 @@
             <div
                 v-for="item in list"
                 :key="item.wordId"
-                class="bg-white border border-emerald-200 rounded-[10px] p-4 shadow-sm h-[200px] flex flex-col"
+                class="bg-white border border-emerald-200 rounded-[10px] p-4 shadow-sm min-h-[220px] flex flex-col"
             >
-                <div class="text-sm font-semibold text-emerald-700 mb-1">{{ item.word }}</div>
-                <div class="text-sm text-gray-500 mb-1">{{ item.phonetic }}</div>
-                <div class="text-sm text-gray-700 mb-1 overflow-hidden line-clamp-2">{{ item.definition }}</div>
+                <div class="text-base font-semibold text-emerald-700 mb-1">{{ item.word }}</div>
+                <div class="text-sm text-gray-500 mb-2">{{ item.phonetic }}</div>
                 <div
-                    v-html="sanitize(item.translation ?? '')"
+                    v-html="formatWordField(item.definition)"
+                    class="text-sm text-gray-700 mb-1 overflow-hidden line-clamp-3"
+                />
+                <div
+                    v-html="formatWordField(item.translation)"
                     class="text-sm text-gray-600 overflow-hidden line-clamp-2 flex-1"
                 />
-                <div class="flex gap-2 mt-2">
+                <div class="flex gap-2 mt-3">
                     <el-button
                         v-if="activeTab === 'learning'"
                         size="small"
@@ -62,7 +65,7 @@
 
         <el-pagination
             v-if="total > 0"
-            class="mt-10"
+            class="mt-10 justify-center"
             background
             v-model:current-page="page"
             v-model:page-size="pageSize"
@@ -77,14 +80,10 @@
 import { ref, onMounted } from 'vue'
 import { Notebook } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import DOMPurify from 'dompurify'
 import type { MyWord } from '@en/common/word'
 import { getMyWords, markMyWordsMastered, removeMyWord } from '@/apis/my-words'
 import { useUserStore } from '@/stores/user'
-
-function sanitize(html: string): string {
-    return DOMPurify.sanitize(html)
-}
+import { formatWordField } from '@/utils/formatWordField'
 
 const userStore = useUserStore()
 const activeTab = ref<'learning' | 'mastered'>('learning')

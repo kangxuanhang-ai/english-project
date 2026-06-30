@@ -14,6 +14,7 @@ import OrderListPage from '@/views/orders/List'
 import OrderDetailPage from '@/views/orders/Detail'
 import UserListPage from '@/views/users/List'
 import UserDetailPage from '@/views/users/Detail'
+import McpTemplatesPage from '@/views/mcp-templates/List'
 import { useUserStore } from '@/stores/user'
 
 function RequireAdmin({ children }: { children: ReactNode }) {
@@ -64,6 +65,7 @@ export const router = createBrowserRouter(
       { path: 'orders', element: <OrderListPage /> },
       { path: 'orders/:id', element: <OrderDetailPage /> },
       { path: 'analytics', element: <AnalyticsOverviewPage /> },
+      { path: 'mcp-templates', element: <McpTemplatesPage /> },
     ],
   },
   ],

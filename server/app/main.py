@@ -15,7 +15,7 @@ from app.config import settings
 from app.database import async_session
 from app.middleware import response_envelope_middleware, exception_handler
 from app.rate_limit import limiter
-from app.routers import user, word_book, course, pay, learn, tracker, my_words, mcp_keys
+from app.routers import user, word_book, course, pay, learn, tracker, my_words, mcp_keys, external_mcp
 from app.routers.admin import router as admin_router
 from app.services.socket import sio
 from shared.minio_client import minio_client
@@ -63,6 +63,7 @@ app.include_router(pay.router)
 app.include_router(learn.router)
 app.include_router(my_words.router)
 app.include_router(mcp_keys.router)
+app.include_router(external_mcp.router)
 app.include_router(tracker.router)
 app.include_router(admin_router)
 

@@ -12,6 +12,7 @@ from app.database import get_db
 from app.models.conversation import Conversation
 from ai.schemas.chat import ChatRequest
 from ai.services.chat import stream_chat, get_chat_history
+from ai.services.wordbook_short_circuit import WORDBOOK_FEATURE, is_wordbook_intent, iter_wordbook_sse
 from ai.rate_limit import limiter
 
 router = APIRouter(prefix="/ai/v1/chat", tags=["chat"])
@@ -51,6 +52,22 @@ async def chat(
     async def _stream():
         emitted = False
         try:
+            if (
+                chat_data.get("role") == "normal"
+                and chat_data.get("userId")
+                and is_wordbook_intent(chat_data.get("content", ""))
+            ):
+                async for chunk in iter_wordbook_sse(
+                    role=chat_data["role"],
+                    user_id=chat_data["userId"],
+                    conversation_id=chat_data["conversationId"],
+                    content=chat_data["content"],
+                ):
+                    if '"type": "done"' in chunk or '"type": "error"' in chunk:
+                        emitted = True
+                    yield chunk
+                return
+
             async for chunk in stream_chat(chat_data):
                 if '"type": "done"' in chunk or '"type": "error"' in chunk:
                     emitted = True

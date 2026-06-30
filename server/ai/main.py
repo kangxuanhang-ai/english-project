@@ -17,6 +17,7 @@ if sys.platform == "win32":
 from ai.routers import prompt, chat, conversation, recommend
 from ai.services.digest import start_scheduler
 from ai.services.tracing import configure_langsmith_tracing
+from ai.services.wordbook_short_circuit import WORDBOOK_FEATURE
 from app.config import settings
 from app.middleware import response_envelope_middleware, exception_handler
 
@@ -29,6 +30,7 @@ async def lifespan(app: FastAPI):
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
     configure_langsmith_tracing()
+    logging.getLogger(__name__).info("AI chat: wordbook short-circuit v3 enabled (router intercept)")
     start_scheduler()
     yield
     from ai.services.chat import reset_checkpointer
@@ -67,6 +69,11 @@ ai_app.include_router(prompt.router)
 ai_app.include_router(chat.router)
 ai_app.include_router(conversation.router)
 ai_app.include_router(recommend.router)
+
+
+@ai_app.get("/health")
+async def health():
+    return {"status": "ok", "wordbook": WORDBOOK_FEATURE}
 
 
 @ai_app.get("/")

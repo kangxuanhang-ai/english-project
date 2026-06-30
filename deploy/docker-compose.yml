@@ -67,6 +67,24 @@ services:
         limits:
           memory: 768M
 
+  fetch-mcp:
+    image: ${ACR_REGISTRY:-registry.cn-hangzhou.aliyuncs.com}/${ACR_NAMESPACE:-english-project}/english-server:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      FETCH_MCP_HOST: "0.0.0.0"
+      FETCH_MCP_PORT: "8080"
+    entrypoint: ["/entrypoint-app.sh"]
+    command:
+      - uv
+      - run
+      - python
+      - -m
+      - external_mcp.fetch_http_server
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
   ai:
     image: ${ACR_REGISTRY:-registry.cn-hangzhou.aliyuncs.com}/${ACR_NAMESPACE:-english-project}/english-server:${IMAGE_TAG:-latest}
     restart: unless-stopped
@@ -77,6 +95,8 @@ services:
       postgres:
         condition: service_healthy
       app:
+        condition: service_started
+      fetch-mcp:
         condition: service_started
     entrypoint: ["/entrypoint-app.sh"]
     command:

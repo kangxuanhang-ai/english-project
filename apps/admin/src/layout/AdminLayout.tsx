@@ -1,4 +1,5 @@
 import {
+  ApiOutlined,
   DashboardOutlined,
   DatabaseOutlined,
   HomeOutlined,
@@ -22,6 +23,7 @@ const menuItems = [
   { key: '/courses', icon: <ReadOutlined />, label: '课程管理' },
   { key: '/orders', icon: <ShoppingOutlined />, label: '订单管理' },
   { key: '/analytics', icon: <LineChartOutlined />, label: '数据监控' },
+  { key: '/mcp-templates', icon: <ApiOutlined />, label: '外部 MCP' },
 ]
 
 const routeLabels: Record<string, string> = {
@@ -32,6 +34,7 @@ const routeLabels: Record<string, string> = {
   '/courses': '课程管理',
   '/orders': '订单管理',
   '/analytics': '数据监控',
+  '/mcp-templates': '外部 MCP',
 }
 
 function buildBreadcrumbs(pathname: string) {

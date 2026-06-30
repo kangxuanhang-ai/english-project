@@ -23,11 +23,12 @@ cd server && uv sync        # Python backend (uv-managed, Python 3.12+)
 ```
 
 ### Start Development (run from repo root)
-- `pnpm all` — Start all services concurrently (web:8080, admin:8081, server:3000, ai:3001)
+- `pnpm all` — Start all services concurrently (web:8080, admin:8081, server:3000, ai:3001, mcp)
 - `pnpm web` — Student frontend only
 - `pnpm admin` — Admin dashboard only
 - `pnpm server` — Main API server only (uvicorn with --reload)
 - `pnpm ai` — AI service only (uvicorn with --reload)
+- `pnpm mcp` — MCP server only (english_mcp http_server)
 
 ### Frontend (apps/web)
 - `pnpm dev` — Vite dev server
@@ -100,7 +101,7 @@ Other roles get an empty tool list.
 
 **Agent eval (Phase 3)**: Dataset `english-agent-normal-v1` on LangSmith (`LANGCHAIN_EVAL_PROJECT=english-agent-eval`). Scripts: `scripts/create_agent_eval_dataset.py`, `scripts/run_agent_eval.py`. Evaluators: tool accuracy, JSON leak, latency.
 
-**SSE token refresh**: The frontend SSE client (`apps/web/src/apis/sse/index.ts`) proactively checks JWT expiry 5 seconds before it expires and refreshes the token mid-stream, distinct from the Axios interceptor flow. The `onerror` handler throws to stop `fetchEventSource` from auto-retrying on failures.
+**SSE client**: The frontend SSE client (`apps/web/src/apis/sse/index.ts`) calls `ensureValidToken()` before opening a connection (5-second expiry buffer), distinct from the Axios interceptor flow. The `onerror` handler throws to stop `fetchEventSource` from auto-retrying on failures.
 
 ### Configuration
 Both apps use pydantic-settings reading from `server/.env`:
@@ -123,7 +124,7 @@ Routes: Home, WordBook, Setting, Chat, Course. Views are in `src/views/` (not `s
 **3D/animation**: Three.js models in `Login/ModelViewer.vue` and `Home/components/Hologram.vue`. GSAP for animations. DOMPurify + marked for markdown rendering in chat.
 
 ### Admin Dashboard: @en/admin (apps/admin)
-React 18 admin panel on port 8081. Uses Ant Design 5, React Router DOM 6, TanStack React Query, Zustand for state, Axios for HTTP. Routes: Dashboard, Users, Courses, Orders, Analytics, Knowledge Base. Depends on `@en/common` for types and `@en/config` for port constants.
+React 18 admin panel on port 8081. Uses Ant Design 5, React Router DOM 6, TanStack React Query, Zustand for state, Axios for HTTP. Routes: Dashboard, Users, Courses, Orders, Analytics, Knowledge Base. Depends on `@en/common` for types and `@en/config` for port constants. Backend admin routes are under `server/app/routers/admin/` (prefix `/api/v1/admin`), guarded by `get_current_admin` dependency.
 
 ### Tracker: @en/tracker
 Client SDK reporting UV (FingerprintJS), PV, events, JS errors, Web Vitals. Exports a `Tracker` class with `setUserId(userId)` to associate visitors with logged-in users.
@@ -134,7 +135,7 @@ Client SDK reporting UV (FingerprintJS), PV, events, JS errors, Web Vitals. Expo
 
 ## Database
 
-PostgreSQL via SQLAlchemy async (asyncpg). Two databases: `english` (app data), `langchain` (AI chat history). ClickHouse for analytics (not yet functional).
+PostgreSQL via SQLAlchemy async (asyncpg). Two databases: `english` (app data), `langchain` (AI chat history). ClickHouse for analytics (not yet functional — `shared/clickhouse_client.py` is empty).
 
 Alembic manages migrations in `server/alembic/`. Models defined in `server/app/models/`.
 
@@ -148,6 +149,10 @@ See [README.md](./README.md) and the **Production Deployment** section in [AGENT
 
 **Key note**: Use `socket_app` (not plain `app`) for the main API entry point in production — Socket.IO is mounted as an ASGI wrapper around the FastAPI app.
 
+## CI/CD
+
+GitHub Actions workflow (`.github/workflows/deploy.yml`) builds Docker images for server and nginx, pushes to GHCR, then deploys via SSH to ECS. Deploys on push to `main` or manual trigger. Uses `deploy/docker-compose.yml` with postgres, minio, app (port 3000), ai (port 3001), and nginx (port 80). The server image is shared by `app` and `ai` containers — entrypoint scripts differ. Nginx image builds both student and admin frontends.
+
 ## Testing
 
 No test infrastructure is configured. The `vitest`, `jest`, `playwright`, and `pytest` config references in `tsconfig.node.json` are boilerplate from the Vue project template — no actual test files or runners exist.
@@ -160,7 +165,7 @@ No test infrastructure is configured. The `vitest`, `jest`, `playwright`, and `p
 
 ## Environment
 
-Server requires `.env` at `server/.env` with: DATABASE_URL, SECRET_KEY, MINIO_*, DEEPSEEK_API_KEY/MODEL, AI_DATABASE_URL, BOCHA_SEARCH_URL/API_KEY, ALIPAY_*, EMAIL_*, CLICKHOUSE_*. Frontend uses `.env.development` / `.env.production` with VITE_MINIO_ENDPOINT and VITE_SOCKET_URL.
+Server requires `.env` at `server/.env` with: DATABASE_URL, SECRET_KEY, MINIO_*, DEEPSEEK_API_KEY/MODEL, AI_DATABASE_URL, BOCHA_SEARCH_URL/API_KEY, ALIPAY_*, EMAIL_*, CLICKHOUSE_*. Frontend uses `.env.development` / `.env.production` with VITE_MINIO_ENDPOINT and VITE_SOCKET_URL. Admin uses `VITE_BASE` for its base path (defaults to `/`).
 
 ## Migration Notes
 
@@ -176,7 +181,7 @@ The backend was migrated from NestJS to Python FastAPI. Migration spec at `docs/
 
 ## Utility Scripts
 
-- `clear_chat_history.py` (repo root) — Clears LangChain chat history from the `langchain` database for all 5 chat role types per user
+- `clear_chat_history.py` (repo root) — Clears LangChain chat history from the `langchain` database for all 5 chat role types per user. Run interactively.
 
 ## Known Issues
 

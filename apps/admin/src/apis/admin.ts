@@ -18,6 +18,7 @@ import type {
   KnowledgeDocumentItem,
   KnowledgeSearchResult,
 } from '@en/common/knowledge'
+import type { AdminMcpTemplateItem } from '@en/common/external-mcp'
 
 export function fetchDashboard() {
   return api.get<unknown, ApiResponse<AdminDashboard>>('/admin/dashboard')
@@ -196,4 +197,28 @@ export function fetchAnalyticsPerformance(days: 7 | 30) {
   return api.get<unknown, ApiResponse<AdminAnalyticsPerformance>>('/admin/analytics/performance', {
     params: { days },
   })
+}
+
+export function fetchMcpTemplates() {
+  return api.get<unknown, ApiResponse<AdminMcpTemplateItem[]>>('/admin/mcp-templates')
+}
+
+export function updateMcpTemplate(
+  id: string,
+  body: Partial<{
+    url: string
+    description: string
+    globallyEnabled: boolean
+    headerSchema: Record<string, unknown>
+    exposedTools: string[]
+    fetchUrlAllowlist: string[]
+  }>,
+) {
+  return api.put(`/admin/mcp-templates/${id}`, body)
+}
+
+export function testMcpTemplate(id: string) {
+  return api.post<unknown, ApiResponse<{ tools: unknown[]; template: AdminMcpTemplateItem }>>(
+    `/admin/mcp-templates/${id}/test`,
+  )
 }

@@ -222,6 +222,9 @@ async def main():
             await seed_admin(db)
             await seed_courses(db)
             await seed_word_book(db)
+        import subprocess
+
+        subprocess.check_call([sys.executable, "scripts/seed_mcp_templates.py"], cwd=os.path.dirname(__file__))
     except Exception as e:
         print(f"Seed 失败: {e}", file=sys.stderr)
         sys.exit(1)

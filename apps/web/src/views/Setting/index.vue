@@ -165,6 +165,75 @@
             <el-empty v-else description="暂无 MCP Key，点击右上角生成" :image-size="72" />
         </el-card>
 
+        <el-card shadow="never" class="mt-4">
+            <template #header>
+                <div class="flex items-center justify-between gap-4">
+                    <div>
+                        <div class="font-bold text-slate-900">外部 MCP</div>
+                        <div class="text-xs text-slate-500">在 normal 聊天中使用 Fetch 等外部工具（需管理员开放）</div>
+                    </div>
+                    <el-button size="small" @click="loadExternalMcp" :loading="externalMcpLoading">刷新</el-button>
+                </div>
+            </template>
+
+            <div v-if="externalMcpItems.length" class="space-y-4">
+                <div
+                    v-for="item in externalMcpItems"
+                    :key="item.alias"
+                    class="rounded-xl border border-slate-200 p-4"
+                >
+                    <div class="flex items-start justify-between gap-4">
+                        <div>
+                            <div class="font-semibold text-slate-900">{{ item.displayName }}</div>
+                            <div class="mt-1 text-sm text-slate-500">{{ item.description }}</div>
+                        </div>
+                        <el-switch
+                            v-model="externalForms[item.alias].enabled"
+                            :disabled="!item.globallyEnabled"
+                            @change="() => saveExternalMcp(item.alias)"
+                        />
+                    </div>
+                    <el-alert
+                        v-if="!item.globallyEnabled"
+                        class="mt-3"
+                        type="info"
+                        :closable="false"
+                        show-icon
+                        title="管理员未开放此 MCP"
+                    />
+                    <template v-else>
+                        <div v-for="field in item.headerSchema.fields" :key="field.key" class="mt-3">
+                            <div class="text-xs text-slate-500 mb-1">{{ field.label }}</div>
+                            <el-input
+                                v-model="externalForms[item.alias].headers[field.key]"
+                                :type="field.secret ? 'password' : 'text'"
+                                :placeholder="field.placeholder || ''"
+                                show-password
+                            />
+                        </div>
+                        <div class="mt-3 flex flex-wrap gap-2">
+                            <el-button size="small" type="primary" @click="saveExternalMcp(item.alias)">保存</el-button>
+                            <el-button size="small" @click="testExternalMcpItem(item.alias)" :loading="externalTesting === item.alias">
+                                测试连接
+                            </el-button>
+                        </div>
+                        <div v-if="item.connection?.toolNames?.length" class="mt-2 text-xs text-slate-500">
+                            可用工具：{{ item.connection.toolNames.join(', ') }}
+                        </div>
+                        <el-alert
+                            v-else-if="item.connection?.needsTest"
+                            class="mt-2"
+                            type="warning"
+                            :closable="false"
+                            show-icon
+                            title="请先测试连接后再在聊天中使用"
+                        />
+                    </template>
+                </div>
+            </div>
+            <el-empty v-else description="暂无已开放的外部 MCP" :image-size="72" />
+        </el-card>
+
         <el-dialog v-model="createKeyVisible" title="生成 MCP Key" width="420px">
             <el-input v-model="newKeyName" placeholder="备注（可选），如：我的 MacBook" maxlength="64" />
             <template #footer>
@@ -199,7 +268,13 @@ import { Connection } from '@element-plus/icons-vue'
 import { useAvatar } from '@/hooks/useAvatar'
 import { useLogin } from '@/hooks/useLogin'
 import { createMcpKey, listMcpKeys, revokeMcpKey } from '@/apis/mcp-keys'
+import {
+    listExternalMcp,
+    testExternalMcp,
+    upsertExternalMcp,
+} from '@/apis/external-mcp'
 import type { McpApiKeyItem } from '@en/common/mcp'
+import type { ExternalMcpTemplateItem } from '@en/common/external-mcp'
 const { customAvatar } = useAvatar()
 const { logout } = useLogin()
 const formRef = useTemplateRef<FormInstance>('formRef') //表单ref
@@ -214,6 +289,10 @@ const newKeyName = ref('')
 const creatingKey = ref(false)
 const revealedKey = ref('')
 const revealedConfig = ref('')
+const externalMcpItems = ref<ExternalMcpTemplateItem[]>([])
+const externalMcpLoading = ref(false)
+const externalTesting = ref('')
+const externalForms = ref<Record<string, { enabled: boolean; headers: Record<string, string> }>>({})
 const form = ref<UserUpdate>({
     name: '', //用户名
     email: '', //邮箱
@@ -302,6 +381,74 @@ const init = () => {
         form.value = {...userStore.getUpdateUserInfo}
         previewUrl.value = customAvatar(form.value.avatar!)
         loadMcpKeys()
+        loadExternalMcp()
+    }
+}
+
+const syncExternalForms = (items: ExternalMcpTemplateItem[]) => {
+    const next: Record<string, { enabled: boolean; headers: Record<string, string> }> = {}
+    for (const item of items) {
+        const headers: Record<string, string> = {}
+        for (const field of item.headerSchema.fields) {
+            headers[field.key] = externalForms.value[item.alias]?.headers[field.key] ?? ''
+        }
+        next[item.alias] = {
+            enabled: item.connection?.enabled ?? false,
+            headers,
+        }
+    }
+    externalForms.value = next
+}
+
+const loadExternalMcp = async () => {
+    externalMcpLoading.value = true
+    try {
+        const res = await listExternalMcp()
+        if (res.success && res.data) {
+            externalMcpItems.value = res.data
+            syncExternalForms(res.data)
+        }
+    } catch {
+        /* 静默 */
+    } finally {
+        externalMcpLoading.value = false
+    }
+}
+
+const saveExternalMcp = async (alias: string) => {
+    const formState = externalForms.value[alias]
+    if (!formState) return
+    try {
+        const res = await upsertExternalMcp(alias, {
+            enabled: formState.enabled,
+            headers: formState.headers,
+        })
+        if (res.success) {
+            ElMessage.success('已保存')
+            await loadExternalMcp()
+        } else {
+            ElMessage.error(res.message || '保存失败')
+        }
+    } catch {
+        ElMessage.error('保存失败')
+    }
+}
+
+const testExternalMcpItem = async (alias: string) => {
+    externalTesting.value = alias
+    try {
+        await saveExternalMcp(alias)
+        const res = await testExternalMcp(alias)
+        if (res.success) {
+            ElMessage.success('连接成功')
+            await loadExternalMcp()
+        } else {
+            ElMessage.error(res.message || '测试失败')
+        }
+    } catch {
+        ElMessage.error('测试失败')
+    } finally {
+        externalTesting.value = ''
     }
 }
 
@@ -321,6 +468,17 @@ const openCreateKey = () => {
     createKeyVisible.value = true
 }
 
+const formatClaudeMcpSnippet = (claudeConfig: Record<string, unknown>) => {
+    const servers = claudeConfig.mcpServers as Record<string, unknown> | undefined
+    const english = servers?.english
+    if (!english) {
+        return JSON.stringify(claudeConfig, null, 2)
+    }
+    const lines = JSON.stringify(english, null, 2).split('\n')
+    const body = [lines[0], ...lines.slice(1).map((line) => `  ${line}`)].join('\n')
+    return `    "english": ${body}`
+}
+
 const submitCreateKey = async () => {
     creatingKey.value = true
     try {
@@ -328,7 +486,7 @@ const submitCreateKey = async () => {
         if (res.success && res.data) {
             createKeyVisible.value = false
             revealedKey.value = res.data.key
-            revealedConfig.value = JSON.stringify(res.data.claudeConfig, null, 2)
+            revealedConfig.value = formatClaudeMcpSnippet(res.data.claudeConfig)
             keyRevealVisible.value = true
             await loadMcpKeys()
         } else {

@@ -39,7 +39,7 @@ dependencies = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["app", "ai", "shared", "english_mcp"]
+packages = ["app", "ai", "shared", "english_mcp", "external_mcp"]
 
 [[tool.uv.index]]
 url = "https://pypi.tuna.tsinghua.edu.cn/simple"

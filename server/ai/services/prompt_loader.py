@@ -54,21 +54,38 @@ def _pull_sync(identifier: str) -> str:
 async def get_role_base_prompt(role: str) -> str:
     """拉取角色 base system prompt；Hub 不可用或未配置 key 时用本地副本。"""
     if not _hub_enabled():
-        return get_local_role_prompt(role)
+        return _append_local_supplement(role, get_local_role_prompt(role))
 
     now = time.monotonic()
     async with _cache_lock:
         cached = _cache.get(role)
         if cached is not None and (now - cached[1]) < _CACHE_TTL_SEC:
-            return cached[0]
+            return _append_local_supplement(role, cached[0])
 
     identifier = hub_prompt_id(role)
     try:
         text = await asyncio.to_thread(_pull_sync, identifier)
     except Exception as exc:
         logger.warning("LangSmith prompt fallback for role=%s: %s", role, exc)
-        return get_local_role_prompt(role)
+        return _append_local_supplement(role, get_local_role_prompt(role))
 
     async with _cache_lock:
         _cache[role] = (text, time.monotonic())
-    return text
+    return _append_local_supplement(role, text)
+
+
+def _append_local_supplement(role: str, text: str) -> str:
+    """Hub prompt 可能滞后于代码；追加本地工具能力说明。"""
+    if role != "normal":
+        return text
+    supplement = """
+
+【平台能力补充 — 本地注入】
+- add_my_words：将英文单词加入用户生词本（复习中）。
+- 用户说「加入生词本」「收藏这些词」「把这些单词放进生词本」时，**必须调用 add_my_words** 或依据已注入的执行结果回复。
+- 写入成功后明确说「已加入生词本复习中」，**禁止**用「学习计划」「去课程学习」代替。
+- **禁止**声称无权限、无法操作或只能手动收藏。
+"""
+    if "add_my_words" in text:
+        return text
+    return text + supplement
