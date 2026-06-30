@@ -39,7 +39,7 @@ services:
           memory: 384M
 
   app:
-    image: ghcr.io/${GHCR_OWNER:-kangxuanhang-ai}/english-project/server:${IMAGE_TAG:-latest}
+    image: ${ACR_REGISTRY:-registry.cn-hangzhou.aliyuncs.com}/${ACR_NAMESPACE:-english-project}/english-server:${IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file: .env
     environment:
@@ -68,7 +68,7 @@ services:
           memory: 768M
 
   ai:
-    image: ghcr.io/${GHCR_OWNER:-kangxuanhang-ai}/english-project/server:${IMAGE_TAG:-latest}
+    image: ${ACR_REGISTRY:-registry.cn-hangzhou.aliyuncs.com}/${ACR_NAMESPACE:-english-project}/english-server:${IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file: .env
     environment:
@@ -96,7 +96,7 @@ services:
           memory: 1536M
 
   mcp:
-    image: ghcr.io/${GHCR_OWNER:-kangxuanhang-ai}/english-project/server:${IMAGE_TAG:-latest}
+    image: ${ACR_REGISTRY:-registry.cn-hangzhou.aliyuncs.com}/${ACR_NAMESPACE:-english-project}/english-server:${IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file: .env
     environment:
@@ -120,7 +120,7 @@ services:
           memory: 512M
 
   nginx:
-    image: ghcr.io/${GHCR_OWNER:-kangxuanhang-ai}/english-project/nginx:${IMAGE_TAG:-latest}
+    image: ${ACR_REGISTRY:-registry.cn-hangzhou.aliyuncs.com}/${ACR_NAMESPACE:-english-project}/english-nginx:${IMAGE_TAG:-latest}
     restart: unless-stopped
     ports:
       - "80:80"
