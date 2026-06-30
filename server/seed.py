@@ -1,8 +1,8 @@
 """从 NestJS seed.ts 迁移过来的数据初始化脚本。
 运行方式: cd server && uv run python seed.py
 
-词库 CSV：默认 server/data/ecdict.sample.csv（演示用少量词条）；
-完整词库可通过环境变量 ECDICT_CSV_PATH 指向 ecdict.csv。
+词库 CSV：默认 server/data/ecdict.csv；
+可通过环境变量 ECDICT_CSV_PATH 覆盖。
 """
 
 import asyncio
@@ -94,7 +94,7 @@ COURSES = [
     },
 ]
 
-_DEFAULT_CSV = os.path.join(os.path.dirname(__file__), "data", "ecdict.sample.csv")
+_DEFAULT_CSV = os.path.join(os.path.dirname(__file__), "data", "ecdict.csv")
 CSV_PATH = os.environ.get("ECDICT_CSV_PATH", _DEFAULT_CSV)
 BATCH_SIZE = 2000
 
@@ -145,7 +145,7 @@ async def seed_word_book(db):
     if not os.path.exists(CSV_PATH):
         print(f"错误: 词库 CSV 不存在: {CSV_PATH}", file=sys.stderr)
         print(
-            "请放置 ecdict.csv 或设置 ECDICT_CSV_PATH，或使用内置 server/data/ecdict.sample.csv。",
+            "请放置 ecdict.csv 于 server/data/ 或设置 ECDICT_CSV_PATH。",
             file=sys.stderr,
         )
         sys.exit(1)
