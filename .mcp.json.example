@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "english": {
+      "type": "stdio",
+      "command": "uv",
+      "args": ["run", "--directory", "server", "python", "-m", "english_mcp"]
+    }
+  }
+}

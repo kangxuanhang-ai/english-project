@@ -35,10 +35,11 @@ dependencies = [
     "pgvector>=0.3.0",
     "langchain-text-splitters>=0.3",
     "fastembed>=0.4.0",
+    "mcp>=1.28.1",
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["app", "ai", "shared"]
+packages = ["app", "ai", "shared", "english_mcp"]
 
 [[tool.uv.index]]
 url = "https://pypi.tuna.tsinghua.edu.cn/simple"

@@ -275,7 +275,8 @@ Windows spawn 失败时 fallback：`cmd /c uv run --directory server python -m e
 ### Phase 3
 
 1. MCP 生词本三 tool 与 Web API 结果一致
-2. （可选）HTTP MCP 本地 curl 通
+2. `platform_health` 返回 `database: up` 与词库条数
+3. （可选）HTTP MCP：`uv run python -m english_mcp.http_server` 监听 `127.0.0.1:3002`，MCP 端点 `POST /mcp`（Streamable HTTP，需 `Accept: application/json, text/event-stream`）
 
 ---
 
